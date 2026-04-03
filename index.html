@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WealthWatch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">W<span>W</span></div>
+        <span class="logo-text">WealthWatch</span>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="dashboard" onclick="showView('dashboard', this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-item" data-view="accounts" onclick="showView('accounts', this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          Accounts
+        </button>
+        <button class="nav-item" data-view="history" onclick="showView('history', this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          History
+        </button>
+        <button class="nav-item" data-view="update" onclick="showView('update', this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Update
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="snapshot-btn" onclick="takeSnapshot()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Save snapshot
+        </button>
+      </div>
+    </aside>
+
+    <!-- Mobile top bar -->
+    <header class="mobile-header">
+      <div class="logo-sm">WW</div>
+      <div class="mobile-nav">
+        <button onclick="showView('dashboard')" data-view="dashboard" class="mob-btn active">Dashboard</button>
+        <button onclick="showView('accounts')" data-view="accounts" class="mob-btn">Accounts</button>
+        <button onclick="showView('history')" data-view="history" class="mob-btn">History</button>
+        <button onclick="showView('update')" data-view="update" class="mob-btn">Update</button>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="main">
+
+      <!-- DASHBOARD VIEW -->
+      <div id="view-dashboard" class="view active">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Dashboard</h1>
+            <p class="view-sub" id="dash-date"></p>
+          </div>
+        </div>
+
+        <div class="net-worth-hero">
+          <div class="nw-label">Total net worth</div>
+          <div class="nw-value" id="nw-total">€0</div>
+          <div class="nw-delta" id="nw-delta"></div>
+        </div>
+
+        <div class="cards-grid">
+          <div class="stat-card" id="card-bank">
+            <div class="card-dot dot-bank"></div>
+            <div class="card-label">Bank</div>
+            <div class="card-value" id="total-bank">€0</div>
+          </div>
+          <div class="stat-card" id="card-invest">
+            <div class="card-dot dot-invest"></div>
+            <div class="card-label">Investments</div>
+            <div class="card-value" id="total-invest">€0</div>
+          </div>
+          <div class="stat-card" id="card-crypto">
+            <div class="card-dot dot-crypto"></div>
+            <div class="card-label">Crypto</div>
+            <div class="card-value" id="total-crypto">€0</div>
+          </div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-header">
+            <h2 class="chart-title">Net worth over time</h2>
+            <div class="chart-range">
+              <button class="range-btn active" onclick="setRange(3, this)">3M</button>
+              <button class="range-btn" onclick="setRange(6, this)">6M</button>
+              <button class="range-btn" onclick="setRange(12, this)">1Y</button>
+              <button class="range-btn" onclick="setRange(0, this)">All</button>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="nwChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-header">
+            <h2 class="chart-title">Allocation</h2>
+          </div>
+          <div class="alloc-wrap">
+            <canvas id="allocChart" style="max-height:180px"></canvas>
+            <div class="alloc-legend" id="alloc-legend"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCOUNTS VIEW -->
+      <div id="view-accounts" class="view">
+        <div class="view-header">
+          <h1 class="view-title">Accounts</h1>
+          <button class="btn-primary" onclick="openAddModal()">+ Add account</button>
+        </div>
+
+        <div class="accounts-group">
+          <div class="group-label">
+            <span class="group-dot dot-bank"></span> Bank / Savings
+          </div>
+          <div id="list-bank" class="accounts-list"></div>
+        </div>
+        <div class="accounts-group">
+          <div class="group-label">
+            <span class="group-dot dot-invest"></span> Investments
+          </div>
+          <div id="list-invest" class="accounts-list"></div>
+        </div>
+        <div class="accounts-group">
+          <div class="group-label">
+            <span class="group-dot dot-crypto"></span> Crypto
+          </div>
+          <div id="list-crypto" class="accounts-list"></div>
+        </div>
+      </div>
+
+      <!-- HISTORY VIEW -->
+      <div id="view-history" class="view">
+        <div class="view-header">
+          <h1 class="view-title">History</h1>
+          <button class="btn-ghost" onclick="exportCSV()">Export CSV</button>
+        </div>
+        <div class="chart-section">
+          <div class="chart-header">
+            <h2 class="chart-title">Balance by category</h2>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="stackedChart"></canvas>
+          </div>
+        </div>
+        <div class="snapshot-table-wrap">
+          <table class="snapshot-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Bank</th>
+                <th>Investments</th>
+                <th>Crypto</th>
+                <th>Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="snapshot-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- UPDATE VIEW -->
+      <div id="view-update" class="view">
+        <div class="view-header">
+          <h1 class="view-title">Update balances</h1>
+        </div>
+        <p class="hint-text">Quickly update all your account balances below, then save snapshot to record today's values.</p>
+        <div id="update-list" class="update-list"></div>
+        <div class="update-actions">
+          <button class="btn-primary full-width" onclick="saveFromUpdate()">Save &amp; take snapshot</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Add/Edit Account Modal -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h2 class="modal-title" id="modal-title">Add account</h2>
+      <div class="form-field">
+        <label>Name</label>
+        <input type="text" id="f-name" placeholder="e.g. Intesa Sanpaolo">
+      </div>
+      <div class="form-field">
+        <label>Type</label>
+        <select id="f-type">
+          <option value="bank">Bank / Savings</option>
+          <option value="invest">Investments</option>
+          <option value="crypto">Crypto</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Current balance (€)</label>
+        <input type="number" id="f-balance" placeholder="0" step="0.01">
+      </div>
+      <div class="form-field" id="f-note-field">
+        <label>Note (optional)</label>
+        <input type="text" id="f-note" placeholder="e.g. 0.5 BTC">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveAccount()">Save</button>
+      </div>
+      <button class="modal-delete" id="modal-delete-btn" onclick="deleteAccount()" style="display:none">Delete account</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
