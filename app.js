@@ -134,6 +134,49 @@ function showView(name, btn) {
 let nwChart = null;
 let allocChart = null;
 let currentRange = 3;
+let currentNWCategory = '';
+let currentNWBlockId = null;
+let allocModeBlock = false;
+
+function setChartFilter(category, btn) {
+  currentNWCategory = category || '';
+  currentNWBlockId = null;
+  document.querySelectorAll('#chart-cat-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderBlockFilters();
+  renderNWChart();
+}
+
+function renderBlockFilters() {
+  const container = document.getElementById('chart-block-filters');
+  if (!currentNWCategory) {
+    container.innerHTML = '';
+    return;
+  }
+  const blocks = accounts.filter(a => a.type === currentNWCategory);
+  if (!blocks.length) {
+    container.innerHTML = '<span class="small-text">No blocks in this category.</span>';
+    return;
+  }
+  container.innerHTML = `
+    <button class="filter-btn ${currentNWBlockId ? '' : 'active'}" onclick="setNWBlockFilter(null, this)">All</button>
+    ${blocks.map(b => `<button class="filter-btn ${currentNWBlockId === b.id ? 'active' : ''}" onclick="setNWBlockFilter('${b.id}', this)">${b.name}</button>`).join('')}
+  `;
+}
+
+function setNWBlockFilter(blockId, btn) {
+  currentNWBlockId = blockId || null;
+  document.querySelectorAll('#chart-block-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderNWChart();
+}
+
+function setAllocView(isBlock, btn) {
+  allocModeBlock = isBlock;
+  document.getElementById('alloc-cat-btn').classList.toggle('active', !isBlock);
+  document.getElementById('alloc-block-btn').classList.toggle('active', isBlock);
+  renderAllocChart();
+}
 
 function renderDashboard() {
   const now = new Date();
@@ -144,6 +187,8 @@ function renderDashboard() {
   document.getElementById('total-bank').textContent = fmt(totalByType('bank'));
   document.getElementById('total-invest').textContent = fmt(totalByType('invest'));
   document.getElementById('total-crypto').textContent = fmt(totalByType('crypto'));
+
+  renderBlockFilters();
 
   const deltaEl = document.getElementById('nw-delta');
   if (snapshots.length >= 2) {
@@ -178,7 +223,31 @@ function setRange(months, btn) {
 function renderNWChart() {
   const snaps = getFilteredSnapshots(currentRange);
   const labels = snaps.map(s => fmtDate(s.date));
-  const data = snaps.map(s => s.total);
+
+  let data;
+  let chartLabel;
+  let color;
+
+  if (!currentNWCategory) {
+    data = snaps.map(s => s.total);
+    chartLabel = 'Total net worth';
+    color = '#e8e0d0';
+  } else if (!currentNWBlockId) {
+    data = snaps.map(s => parseFloat(s[currentNWCategory]) || 0);
+    chartLabel = `${currentNWCategory.charAt(0).toUpperCase() + currentNWCategory.slice(1)} Over Time`;
+    color = currentNWCategory === 'bank' ? '#2563eb' : currentNWCategory === 'invest' ? '#16a34a' : '#d97706';
+  } else {
+    const block = accounts.find(a => a.id === currentNWBlockId);
+    const balance = block ? parseFloat(block.balance) || 0 : 0;
+    data = snaps.map(() => balance);
+    chartLabel = block ? `${block.name} (current)` : 'Block';
+    color = '#f59e0b';
+  }
+
+  document.getElementById('nw-chart-title').textContent = currentNWCategory
+    ? (currentNWBlockId ? `Net worth: ${chartLabel}` : `Net worth: ${chartLabel}`)
+    : 'Net worth over time';
+
   if (nwChart) nwChart.destroy();
   const ctx = document.getElementById('nwChart').getContext('2d');
   nwChart = new Chart(ctx, {
@@ -186,17 +255,18 @@ function renderNWChart() {
     data: {
       labels,
       datasets: [{
+        label: chartLabel,
         data,
-        borderColor: '#e8e0d0',
+        borderColor: color,
         borderWidth: 2,
-        pointBackgroundColor: '#e8e0d0',
+        pointBackgroundColor: color,
         pointRadius: data.length <= 12 ? 4 : 2,
         pointHoverRadius: 6,
         fill: true,
         backgroundColor: (ctx) => {
           const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 220);
-          g.addColorStop(0, 'rgba(232,224,208,0.15)');
-          g.addColorStop(1, 'rgba(232,224,208,0)');
+          g.addColorStop(0, color === '#e8e0d0' ? 'rgba(232,224,208,0.15)' : 'rgba(37,99,235,0.15)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
           return g;
         },
         tension: 0.4,
@@ -217,19 +287,36 @@ function renderNWChart() {
 }
 
 function renderAllocChart() {
-  const bank = totalByType('bank');
-  const invest = totalByType('invest');
-  const crypto = totalByType('crypto');
-  const total = bank + invest + crypto || 1;
+  let labels = [];
+  let data = [];
+  let colors = [];
+
+  if (!allocModeBlock) {
+    const bank = totalByType('bank');
+    const invest = totalByType('invest');
+    const crypto = totalByType('crypto');
+    labels = ['Bank', 'Investments', 'Crypto'];
+    data = [bank, invest, crypto];
+    colors = ['#2563eb', '#16a34a', '#d97706'];
+  } else {
+    labels = accounts.map(a => a.name || 'Unnamed');
+    data = accounts.map(a => parseFloat(a.balance) || 0);
+    colors = accounts.map((_, idx) => [
+      '#2563eb', '#16a34a', '#d97706', '#9333ea', '#14b8a6', '#f59e0b', '#db2777', '#0ea5e9'
+    ][idx % 8]);
+  }
+
+  const total = data.reduce((sum, x) => sum + x, 0) || 1;
+
   if (allocChart) allocChart.destroy();
   const ctx = document.getElementById('allocChart').getContext('2d');
   allocChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Bank', 'Investments', 'Crypto'],
+      labels,
       datasets: [{
-        data: [bank, invest, crypto],
-        backgroundColor: ['#2563eb', '#16a34a', '#d97706'],
+        data,
+        backgroundColor: colors,
         borderColor: '#181818', borderWidth: 3,
       }]
     },
@@ -241,16 +328,13 @@ function renderAllocChart() {
       }}
     }
   });
+
   const legendEl = document.getElementById('alloc-legend');
-  legendEl.innerHTML = [
-    { label: 'Bank', val: bank, color: '#2563eb' },
-    { label: 'Investments', val: invest, color: '#16a34a' },
-    { label: 'Crypto', val: crypto, color: '#d97706' },
-  ].map(c => `
+  legendEl.innerHTML = labels.map((label, i) => `
     <div class="legend-item">
-      <span class="legend-dot" style="background:${c.color}"></span>
-      <span>${c.label}</span>
-      <span class="legend-pct">${((c.val / total) * 100).toFixed(0)}%</span>
+      <span class="legend-dot" style="background:${colors[i]}"></span>
+      <span>${label}</span>
+      <span class="legend-pct">${((data[i] / total) * 100).toFixed(0)}%</span>
     </div>
   `).join('');
 }
