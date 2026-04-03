@@ -115,18 +115,31 @@
         </div>
         <div class="chart-section">
           <div class="chart-header">
-            <h2 class="chart-title">Net worth over time</h2>
-            <div class="chart-range">
+            <h2 class="chart-title" id="nw-chart-title">Net worth over time</h2>
+            <div class="chart-range" id="nw-range-btns">
               <button class="range-btn active" onclick="setRange(3, this)">3M</button>
               <button class="range-btn" onclick="setRange(6, this)">6M</button>
               <button class="range-btn" onclick="setRange(12, this)">1Y</button>
               <button class="range-btn" onclick="setRange(0, this)">All</button>
             </div>
           </div>
+          <div class="chart-filters" id="chart-cat-filters">
+            <button class="filter-btn active" data-cat="" onclick="setChartFilter(null, this)">All</button>
+            <button class="filter-btn" data-cat="bank" onclick="setChartFilter('bank', this)">Bank</button>
+            <button class="filter-btn" data-cat="invest" onclick="setChartFilter('invest', this)">Investments</button>
+            <button class="filter-btn" data-cat="crypto" onclick="setChartFilter('crypto', this)">Crypto</button>
+          </div>
+          <div class="chart-filters chart-block-filters" id="chart-block-filters"></div>
           <div class="chart-wrap"><canvas id="nwChart"></canvas></div>
         </div>
         <div class="chart-section">
-          <div class="chart-header"><h2 class="chart-title">Allocation</h2></div>
+          <div class="chart-header">
+            <h2 class="chart-title">Allocation</h2>
+            <div class="chart-range">
+              <button class="range-btn active" id="alloc-cat-btn" onclick="setAllocView(false, this)">By category</button>
+              <button class="range-btn" id="alloc-block-btn" onclick="setAllocView(true, this)">By block</button>
+            </div>
+          </div>
           <div class="alloc-wrap">
             <canvas id="allocChart" style="max-height:180px"></canvas>
             <div class="alloc-legend" id="alloc-legend"></div>
