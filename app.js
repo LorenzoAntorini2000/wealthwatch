@@ -1,58 +1,136 @@
-// ── STATE ──────────────────────────────────────────────────────────
-const STORE = 'wealthwatch_v1';
+// ── SUPABASE INIT ───────────────────────────────────────────────────
+const SUPABASE_URL = 'https://ylmynyndlqpnwulwewyt.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ltjdILZ1g36cGEBcZgkZrg_KiuNbglJ';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let state = {
-  accounts: [],   // { id, name, type, balance, note }
-  snapshots: [],  // { date, bank, invest, crypto, total }
-};
+// ── STATE ───────────────────────────────────────────────────────────
+let currentUser = null;
+let accounts = [];
+let snapshots = [];
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (raw) state = JSON.parse(raw);
-  } catch(e) {}
-}
-
-function saveState() {
-  localStorage.setItem(STORE, JSON.stringify(state));
-}
-
-// ── FORMATTING ─────────────────────────────────────────────────────
+// ── FORMATTING ──────────────────────────────────────────────────────
 function fmt(n) {
   return new Intl.NumberFormat('it-IT', {
     style: 'currency', currency: 'EUR', maximumFractionDigits: 0
   }).format(n || 0);
 }
-
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// ── TOTALS ─────────────────────────────────────────────────────────
+// ── AUTH ────────────────────────────────────────────────────────────
+let authMode = 'signin';
+
+function toggleAuthMode() {
+  authMode = authMode === 'signin' ? 'signup' : 'signin';
+  document.getElementById('auth-btn').textContent = authMode === 'signin' ? 'Sign in' : 'Create account';
+  document.getElementById('switch-btn').textContent = authMode === 'signin'
+    ? 'No account yet? Sign up'
+    : 'Already have an account? Sign in';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+async function handleAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('auth-error');
+  const loadEl = document.getElementById('auth-loading');
+
+  if (!email || !password) {
+    showAuthError('Please enter your email and password.');
+    return;
+  }
+
+  errEl.style.display = 'none';
+  loadEl.style.display = 'block';
+  loadEl.textContent = authMode === 'signin' ? 'Signing in…' : 'Creating account…';
+  document.getElementById('auth-btn').disabled = true;
+
+  let result;
+  if (authMode === 'signin') {
+    result = await sb.auth.signInWithPassword({ email, password });
+  } else {
+    result = await sb.auth.signUp({ email, password });
+  }
+
+  loadEl.style.display = 'none';
+  document.getElementById('auth-btn').disabled = false;
+
+  if (result.error) {
+    showAuthError(result.error.message);
+    return;
+  }
+
+  if (authMode === 'signup' && !result.data.session) {
+    showAuthError('Account created! Check your email to confirm, then sign in.', false);
+    toggleAuthMode();
+    return;
+  }
+
+  currentUser = result.data.user;
+  await bootApp();
+}
+
+function showAuthError(msg, isError = true) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.color = isError ? '#f87171' : '#4ade80';
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  currentUser = null;
+  accounts = [];
+  snapshots = [];
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('auth-email').value = '';
+  document.getElementById('auth-password').value = '';
+}
+
+// ── BOOT ────────────────────────────────────────────────────────────
+async function bootApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('user-email-display').textContent = currentUser.email;
+
+  await Promise.all([loadAccounts(), loadSnapshots()]);
+  showView('dashboard');
+}
+
+// ── DATA LOADING ─────────────────────────────────────────────────────
+async function loadAccounts() {
+  const { data, error } = await sb.from('accounts').select('*').order('created_at');
+  if (!error) accounts = data || [];
+}
+
+async function loadSnapshots() {
+  const { data, error } = await sb.from('snapshots').select('*').order('date');
+  if (!error) snapshots = data || [];
+}
+
+// ── TOTALS ──────────────────────────────────────────────────────────
 function totalByType(type) {
-  return state.accounts.filter(a => a.type === type).reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
+  return accounts.filter(a => a.type === type).reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
 }
 function grandTotal() {
   return totalByType('bank') + totalByType('invest') + totalByType('crypto');
 }
 
-// ── VIEW SWITCHING ──────────────────────────────────────────────────
+// ── VIEW SWITCHING ───────────────────────────────────────────────────
 function showView(name, btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.mob-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  // also sync mobile buttons
+  document.querySelectorAll('.nav-item, .mob-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('[data-view="' + name + '"]').forEach(b => b.classList.add('active'));
-
   if (name === 'dashboard') renderDashboard();
   if (name === 'accounts') renderAccounts();
   if (name === 'history') renderHistory();
   if (name === 'update') renderUpdate();
 }
 
-// ── DASHBOARD ──────────────────────────────────────────────────────
+// ── DASHBOARD ────────────────────────────────────────────────────────
 let nwChart = null;
 let allocChart = null;
 let currentRange = 3;
@@ -62,17 +140,15 @@ function renderDashboard() {
   document.getElementById('dash-date').textContent =
     now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-  const total = grandTotal();
-  document.getElementById('nw-total').textContent = fmt(total);
+  document.getElementById('nw-total').textContent = fmt(grandTotal());
   document.getElementById('total-bank').textContent = fmt(totalByType('bank'));
   document.getElementById('total-invest').textContent = fmt(totalByType('invest'));
   document.getElementById('total-crypto').textContent = fmt(totalByType('crypto'));
 
-  // Delta vs last snapshot
   const deltaEl = document.getElementById('nw-delta');
-  if (state.snapshots.length >= 2) {
-    const prev = state.snapshots[state.snapshots.length - 2].total;
-    const diff = total - prev;
+  if (snapshots.length >= 2) {
+    const prev = snapshots[snapshots.length - 2].total;
+    const diff = grandTotal() - prev;
     const pct = prev ? ((diff / prev) * 100).toFixed(1) : 0;
     deltaEl.textContent = (diff >= 0 ? '▲ +' : '▼ ') + fmt(diff) + ' (' + pct + '%) vs last snapshot';
     deltaEl.className = 'nw-delta ' + (diff >= 0 ? 'pos' : 'neg');
@@ -86,16 +162,16 @@ function renderDashboard() {
 }
 
 function getFilteredSnapshots(months) {
-  if (!months) return state.snapshots;
+  if (!months) return snapshots;
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - months);
-  return state.snapshots.filter(s => new Date(s.date) >= cutoff);
+  return snapshots.filter(s => new Date(s.date) >= cutoff);
 }
 
 function setRange(months, btn) {
   currentRange = months;
   document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
   renderNWChart();
 }
 
@@ -103,9 +179,7 @@ function renderNWChart() {
   const snaps = getFilteredSnapshots(currentRange);
   const labels = snaps.map(s => fmtDate(s.date));
   const data = snaps.map(s => s.total);
-
   if (nwChart) nwChart.destroy();
-
   const ctx = document.getElementById('nwChart').getContext('2d');
   nwChart = new Chart(ctx, {
     type: 'line',
@@ -147,7 +221,6 @@ function renderAllocChart() {
   const invest = totalByType('invest');
   const crypto = totalByType('crypto');
   const total = bank + invest + crypto || 1;
-
   if (allocChart) allocChart.destroy();
   const ctx = document.getElementById('allocChart').getContext('2d');
   allocChart = new Chart(ctx, {
@@ -157,28 +230,23 @@ function renderAllocChart() {
       datasets: [{
         data: [bank, invest, crypto],
         backgroundColor: ['#2563eb', '#16a34a', '#d97706'],
-        borderColor: '#181818',
-        borderWidth: 3,
-        hoverBorderWidth: 3,
+        borderColor: '#181818', borderWidth: 3,
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: true,
-      cutout: '70%',
+      responsive: true, maintainAspectRatio: true, cutout: '70%',
       plugins: { legend: { display: false }, tooltip: {
         backgroundColor: '#222', bodyColor: '#e8e0d0',
         callbacks: { label: ctx => ' ' + fmt(ctx.parsed) + ' (' + ((ctx.parsed / total) * 100).toFixed(1) + '%)' }
       }}
     }
   });
-
   const legendEl = document.getElementById('alloc-legend');
-  const cats = [
+  legendEl.innerHTML = [
     { label: 'Bank', val: bank, color: '#2563eb' },
     { label: 'Investments', val: invest, color: '#16a34a' },
     { label: 'Crypto', val: crypto, color: '#d97706' },
-  ];
-  legendEl.innerHTML = cats.map(c => `
+  ].map(c => `
     <div class="legend-item">
       <span class="legend-dot" style="background:${c.color}"></span>
       <span>${c.label}</span>
@@ -187,18 +255,18 @@ function renderAllocChart() {
   `).join('');
 }
 
-// ── ACCOUNTS ───────────────────────────────────────────────────────
+// ── ACCOUNTS ─────────────────────────────────────────────────────────
 const ICONS = { bank: '🏦', invest: '📈', crypto: '₿' };
 
 function renderAccounts() {
   ['bank', 'invest', 'crypto'].forEach(type => {
     const list = document.getElementById('list-' + type);
-    const accounts = state.accounts.filter(a => a.type === type);
-    if (!accounts.length) {
-      list.innerHTML = '<div class="empty-state">No accounts yet — add one above</div>';
+    const accs = accounts.filter(a => a.type === type);
+    if (!accs.length) {
+      list.innerHTML = '<div class="empty-state">No accounts yet</div>';
       return;
     }
-    list.innerHTML = accounts.map(a => `
+    list.innerHTML = accs.map(a => `
       <div class="account-row" onclick="openEditModal('${a.id}')">
         <div class="acc-icon">${ICONS[a.type]}</div>
         <div class="acc-info">
@@ -211,33 +279,30 @@ function renderAccounts() {
   });
 }
 
-// ── HISTORY ────────────────────────────────────────────────────────
+// ── HISTORY ──────────────────────────────────────────────────────────
 let stackedChart = null;
 
 function renderHistory() {
   const tbody = document.getElementById('snapshot-tbody');
-  if (!state.snapshots.length) {
+  if (!snapshots.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:24px">No snapshots yet — use "Save snapshot" to record today\'s balances</td></tr>';
   } else {
-    tbody.innerHTML = [...state.snapshots].reverse().map((s, i) => `
+    tbody.innerHTML = [...snapshots].reverse().map((s) => `
       <tr>
         <td>${fmtDate(s.date)}</td>
         <td>${fmt(s.bank)}</td>
         <td>${fmt(s.invest)}</td>
         <td>${fmt(s.crypto)}</td>
         <td class="td-total">${fmt(s.total)}</td>
-        <td class="td-del" onclick="deleteSnapshot(${state.snapshots.length - 1 - i})">✕</td>
+        <td class="td-del" onclick="deleteSnapshot('${s.id}')">✕</td>
       </tr>
     `).join('');
   }
-
   renderStackedChart();
 }
 
 function renderStackedChart() {
-  const snaps = state.snapshots;
-  const labels = snaps.map(s => fmtDate(s.date));
-
+  const labels = snapshots.map(s => fmtDate(s.date));
   if (stackedChart) stackedChart.destroy();
   const ctx = document.getElementById('stackedChart').getContext('2d');
   stackedChart = new Chart(ctx, {
@@ -245,9 +310,9 @@ function renderStackedChart() {
     data: {
       labels,
       datasets: [
-        { label: 'Bank', data: snaps.map(s => s.bank), backgroundColor: 'rgba(37,99,235,0.7)', stack: 'a' },
-        { label: 'Investments', data: snaps.map(s => s.invest), backgroundColor: 'rgba(22,163,74,0.7)', stack: 'a' },
-        { label: 'Crypto', data: snaps.map(s => s.crypto), backgroundColor: 'rgba(217,119,6,0.7)', stack: 'a' },
+        { label: 'Bank', data: snapshots.map(s => s.bank), backgroundColor: 'rgba(37,99,235,0.7)', stack: 'a' },
+        { label: 'Investments', data: snapshots.map(s => s.invest), backgroundColor: 'rgba(22,163,74,0.7)', stack: 'a' },
+        { label: 'Crypto', data: snapshots.map(s => s.crypto), backgroundColor: 'rgba(217,119,6,0.7)', stack: 'a' },
       ]
     },
     options: {
@@ -265,18 +330,19 @@ function renderStackedChart() {
   });
 }
 
-function deleteSnapshot(idx) {
+async function deleteSnapshot(id) {
   if (!confirm('Delete this snapshot?')) return;
-  state.snapshots.splice(idx, 1);
-  saveState();
+  const { error } = await sb.from('snapshots').delete().eq('id', id);
+  if (error) { showToast('Error deleting snapshot'); return; }
+  snapshots = snapshots.filter(s => s.id !== id);
   renderHistory();
   showToast('Snapshot deleted');
 }
 
 function exportCSV() {
-  if (!state.snapshots.length) { showToast('No snapshots to export'); return; }
+  if (!snapshots.length) { showToast('No snapshots to export'); return; }
   const rows = [['Date', 'Bank', 'Investments', 'Crypto', 'Total']];
-  state.snapshots.forEach(s => rows.push([s.date, s.bank, s.invest, s.crypto, s.total]));
+  snapshots.forEach(s => rows.push([s.date, s.bank, s.invest, s.crypto, s.total]));
   const csv = rows.map(r => r.join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv,' + encodeURIComponent(csv);
@@ -285,16 +351,16 @@ function exportCSV() {
   showToast('CSV exported');
 }
 
-// ── UPDATE VIEW ─────────────────────────────────────────────────────
+// ── UPDATE VIEW ──────────────────────────────────────────────────────
 function renderUpdate() {
   const list = document.getElementById('update-list');
-  if (!state.accounts.length) {
+  if (!accounts.length) {
     list.innerHTML = '<div class="empty-state">Add accounts first in the Accounts tab</div>';
     return;
   }
-  list.innerHTML = state.accounts.map(a => `
+  list.innerHTML = accounts.map(a => `
     <div class="update-row">
-      <div class="acc-icon" style="width:32px;height:32px;font-size:13px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ICONS[a.type]}</div>
+      <div style="width:32px;height:32px;font-size:13px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ICONS[a.type]}</div>
       <div class="update-name">${a.name}</div>
       <div class="update-input-wrap">
         <span class="update-currency">€</span>
@@ -304,36 +370,51 @@ function renderUpdate() {
   `).join('');
 }
 
-function saveFromUpdate() {
-  document.querySelectorAll('.update-input').forEach(inp => {
-    const acc = state.accounts.find(a => a.id === inp.dataset.id);
-    if (acc) acc.balance = parseFloat(inp.value) || 0;
+async function saveFromUpdate() {
+  const inputs = document.querySelectorAll('.update-input');
+  const updates = [];
+  inputs.forEach(inp => {
+    const acc = accounts.find(a => a.id === inp.dataset.id);
+    if (acc) {
+      acc.balance = parseFloat(inp.value) || 0;
+      updates.push(sb.from('accounts').update({ balance: acc.balance }).eq('id', acc.id));
+    }
   });
-  saveState();
-  takeSnapshot();
+  await Promise.all(updates);
+  await takeSnapshot();
   showToast('Balances updated & snapshot saved');
 }
 
-// ── SNAPSHOT ───────────────────────────────────────────────────────
-function takeSnapshot() {
+// ── SNAPSHOT ─────────────────────────────────────────────────────────
+async function takeSnapshot() {
+  const today = new Date().toISOString().split('T')[0];
   const snap = {
-    date: new Date().toISOString().split('T')[0],
+    user_id: currentUser.id,
+    date: today,
     bank: Math.round(totalByType('bank')),
     invest: Math.round(totalByType('invest')),
     crypto: Math.round(totalByType('crypto')),
     total: Math.round(grandTotal()),
   };
-  // Replace if same day
-  const today = snap.date;
-  const idx = state.snapshots.findIndex(s => s.date === today);
-  if (idx >= 0) state.snapshots[idx] = snap;
-  else state.snapshots.push(snap);
-  saveState();
+
+  // Upsert: replace if same day already exists
+  const { data, error } = await sb.from('snapshots')
+    .upsert(snap, { onConflict: 'user_id,date' })
+    .select()
+    .single();
+
+  if (error) { showToast('Error saving snapshot'); return; }
+
+  const idx = snapshots.findIndex(s => s.date === today);
+  if (idx >= 0) snapshots[idx] = data;
+  else snapshots.push(data);
+  snapshots.sort((a, b) => a.date.localeCompare(b.date));
+
   showToast('Snapshot saved for ' + fmtDate(today));
   renderDashboard();
 }
 
-// ── MODAL: ADD / EDIT ───────────────────────────────────────────────
+// ── MODAL ─────────────────────────────────────────────────────────────
 let editingId = null;
 
 function openAddModal() {
@@ -349,7 +430,7 @@ function openAddModal() {
 }
 
 function openEditModal(id) {
-  const acc = state.accounts.find(a => a.id === id);
+  const acc = accounts.find(a => a.id === id);
   if (!acc) return;
   editingId = id;
   document.getElementById('modal-title').textContent = 'Edit account';
@@ -365,7 +446,7 @@ function closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
 }
 
-function saveAccount() {
+async function saveAccount() {
   const name = document.getElementById('f-name').value.trim();
   if (!name) { document.getElementById('f-name').focus(); return; }
   const type = document.getElementById('f-type').value;
@@ -373,35 +454,44 @@ function saveAccount() {
   const note = document.getElementById('f-note').value.trim();
 
   if (editingId) {
-    const acc = state.accounts.find(a => a.id === editingId);
+    const { error } = await sb.from('accounts').update({ name, type, balance, note }).eq('id', editingId);
+    if (error) { showToast('Error updating account'); return; }
+    const acc = accounts.find(a => a.id === editingId);
     if (acc) Object.assign(acc, { name, type, balance, note });
+    showToast('Account updated');
   } else {
-    state.accounts.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), name, type, balance, note });
+    const { data, error } = await sb.from('accounts')
+      .insert({ user_id: currentUser.id, name, type, balance, note })
+      .select().single();
+    if (error) { showToast('Error adding account'); return; }
+    accounts.push(data);
+    showToast('Account added');
   }
-  saveState();
+
   closeModal();
   renderAccounts();
   renderDashboard();
-  showToast(editingId ? 'Account updated' : 'Account added');
 }
 
-function deleteAccount() {
+async function deleteAccount() {
   if (!confirm('Delete this account?')) return;
-  state.accounts = state.accounts.filter(a => a.id !== editingId);
-  saveState();
+  const { error } = await sb.from('accounts').delete().eq('id', editingId);
+  if (error) { showToast('Error deleting account'); return; }
+  accounts = accounts.filter(a => a.id !== editingId);
   closeModal();
   renderAccounts();
   renderDashboard();
   showToast('Account deleted');
 }
 
-// ── KEYBOARD / CLICK OUTSIDE ────────────────────────────────────────
+// ── KEYBOARD ──────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
   if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('open')) saveAccount();
+  if (e.key === 'Enter' && document.getElementById('auth-screen').style.display !== 'none') handleAuth();
 });
 
-// ── TOAST ───────────────────────────────────────────────────────────
+// ── TOAST ─────────────────────────────────────────────────────────────
 let toastTimer;
 function showToast(msg) {
   const el = document.getElementById('toast');
@@ -411,34 +501,12 @@ function showToast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
-// ── SEED DEMO DATA (first run) ──────────────────────────────────────
-function seedDemo() {
-  if (state.accounts.length) return;
-  state.accounts = [
-    { id: 'a1', name: 'Intesa Sanpaolo', type: 'bank', balance: 12400, note: '' },
-    { id: 'a2', name: 'Revolut', type: 'bank', balance: 3200, note: '' },
-    { id: 'a3', name: 'Fineco ETF Portfolio', type: 'invest', balance: 28500, note: '' },
-    { id: 'a4', name: 'Bitcoin', type: 'crypto', balance: 4100, note: '0.052 BTC' },
-  ];
-  // Seed 6 months of snapshots
-  const base = { bank: 15000, invest: 24000, crypto: 3200 };
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const jitter = () => Math.round((Math.random() - 0.3) * 1200);
-    const bank = base.bank + jitter() + (5 - i) * 300;
-    const invest = base.invest + jitter() + (5 - i) * 800;
-    const crypto = base.crypto + jitter() + (5 - i) * 150;
-    state.snapshots.push({
-      date: d.toISOString().split('T')[0],
-      bank: Math.round(bank), invest: Math.round(invest), crypto: Math.round(crypto),
-      total: Math.round(bank + invest + crypto)
-    });
+// ── INIT ──────────────────────────────────────────────────────────────
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    await bootApp();
   }
-  saveState();
-}
-
-// ── INIT ────────────────────────────────────────────────────────────
-loadState();
-seedDemo();
-showView('dashboard');
+  // else: auth screen is already visible by default
+})();
