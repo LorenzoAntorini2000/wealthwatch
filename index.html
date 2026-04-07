@@ -189,6 +189,9 @@
         <div class="view-header"><h1 class="view-title">Update balances</h1></div>
         <p class="hint-text">Update your account balances below, then save a snapshot to record today's values.</p>
         <div id="update-list" class="update-list"></div>
+        <div id="crypto-refresh-section" class="update-actions" style="display:none">
+          <button id="refresh-crypto-btn" class="btn-ghost full-width" onclick="refreshCryptoAccount()">⟳ Refresh from Crypto.com</button>
+        </div>
         <div class="update-actions">
           <button class="btn-primary full-width" onclick="saveFromUpdate()">Save &amp; take snapshot</button>
         </div>

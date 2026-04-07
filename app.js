@@ -440,6 +440,7 @@ function renderUpdate() {
   const list = document.getElementById('update-list');
   if (!accounts.length) {
     list.innerHTML = '<div class="empty-state">Add accounts first in the Accounts tab</div>';
+    document.getElementById('crypto-refresh-section').style.display = 'none';
     return;
   }
   list.innerHTML = accounts.map(a => `
@@ -452,6 +453,45 @@ function renderUpdate() {
       </div>
     </div>
   `).join('');
+  document.getElementById('crypto-refresh-section').style.display =
+    accounts.some(a => a.type === 'crypto') ? '' : 'none';
+}
+
+async function fetchCryptoTotal() {
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(SUPABASE_URL + '/functions/v1/crypto-balance', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + session.access_token,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('Failed to fetch crypto balance');
+  return (await res.json()).total_eur;
+}
+
+async function refreshCryptoAccount() {
+  const cryptoAcc = accounts.find(a => a.type === 'crypto');
+  if (!cryptoAcc) { showToast('No crypto account found'); return; }
+
+  const btn = document.getElementById('refresh-crypto-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Refreshing…';
+
+  try {
+    const totalEur = await fetchCryptoTotal();
+    const { error } = await sb.from('accounts').update({ balance: totalEur }).eq('id', cryptoAcc.id);
+    if (error) throw new Error('DB update failed');
+    cryptoAcc.balance = totalEur;
+    renderUpdate();
+    renderDashboard();
+    showToast('Crypto balance updated: ' + fmt(totalEur));
+  } catch {
+    showToast('Failed to refresh crypto balance');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟳ Refresh from Crypto.com';
+  }
 }
 
 async function saveFromUpdate() {
