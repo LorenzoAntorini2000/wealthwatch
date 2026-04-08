@@ -48,12 +48,13 @@ Deno.serve(async (req) => {
   const nonce = Date.now();
   const id = nonce;
   const method = "private/user-balance";
-  const params = {};
-  const paramsJson = JSON.stringify(params);
+  const params: Record<string, unknown> = {};
 
   // 4. Compute HMAC-SHA256 signature
-  // sig_payload = method + id + api_key + params_json + nonce
-  const sigPayload = method + id + apiKey + paramsJson + nonce;
+  // params_string = sorted key-value pairs concatenated (empty string when params is {})
+  // sig_payload = method + id + api_key + params_string + nonce
+  const paramsStr = Object.keys(params).sort().map(k => k + params[k]).join("");
+  const sigPayload = method + id + apiKey + paramsStr + nonce;
   const encoder = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
@@ -91,10 +92,12 @@ Deno.serve(async (req) => {
   }
 
   if (!cryptoRes.ok) {
+    console.error("Crypto.com non-2xx:", cryptoRes.status, await cryptoRes.text());
     return jsonError(502, "Crypto.com API returned a non-2xx status");
   }
 
   const cryptoData = await cryptoRes.json();
+  console.log("Crypto.com code:", cryptoData.code, "msg:", cryptoData.message);
   if (cryptoData.code !== 0) {
     return jsonError(502, "Crypto.com API returned a business error");
   }
