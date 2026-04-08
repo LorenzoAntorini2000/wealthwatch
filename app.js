@@ -3,10 +3,15 @@ const SUPABASE_URL = 'https://ylmynyndlqpnwulwewyt.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ltjdILZ1g36cGEBcZgkZrg_KiuNbglJ';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// URL that Enable Banking redirects to after bank authorisation.
+// In production: your GitHub Pages URL. In development: http://localhost:PORT
+const BANK_REDIRECT_URL = 'https://lorenzoantorini2000.github.io/wealthwatch/';
+
 // ── STATE ───────────────────────────────────────────────────────────
 let currentUser = null;
 let accounts = [];
 let snapshots = [];
+let bankConnections = [];
 
 // ── FORMATTING ──────────────────────────────────────────────────────
 function fmt(n) {
@@ -96,6 +101,26 @@ async function bootApp() {
   document.getElementById('user-email-display').textContent = currentUser.email;
 
   await Promise.all([loadAccounts(), loadSnapshots()]);
+
+  // Check if we're returning from a bank authorisation redirect
+  const urlParams = new URLSearchParams(window.location.search);
+  const authCode  = urlParams.get('code');
+  const accountId = urlParams.get('state');  // account_id was passed as the state param
+
+  if (authCode && accountId) {
+    // Clean the URL so a refresh doesn't re-trigger
+    window.history.replaceState({}, '', window.location.pathname);
+
+    const sessionId = localStorage.getItem('eb_pending_session_id');
+    const bankName  = localStorage.getItem('eb_pending_bank_name') || '';
+    localStorage.removeItem('eb_pending_session_id');
+    localStorage.removeItem('eb_pending_bank_name');
+
+    if (sessionId) {
+      await completeBankLink(authCode, sessionId, accountId, bankName);
+    }
+  }
+
   showView('dashboard');
 }
 
@@ -108,6 +133,11 @@ async function loadAccounts() {
 async function loadSnapshots() {
   const { data, error } = await sb.from('snapshots').select('*').order('date');
   if (!error) snapshots = data || [];
+}
+
+async function loadBankConnections() {
+  const { data, error } = await sb.from('bank_connections').select('*').order('created_at');
+  if (!error) bankConnections = data || [];
 }
 
 // ── TOTALS ──────────────────────────────────────────────────────────
@@ -466,7 +496,10 @@ async function fetchCryptoTotal() {
       'Content-Type': 'application/json'
     }
   });
-  if (!res.ok) throw new Error('Failed to fetch crypto balance');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`Edge Function error ${res.status}: ${body.error || 'unknown'}`);
+  }
   return (await res.json()).total_eur;
 }
 
@@ -486,12 +519,54 @@ async function refreshCryptoAccount() {
     renderUpdate();
     renderDashboard();
     showToast('Crypto balance updated: ' + fmt(totalEur));
-  } catch {
+  } catch (err) {
+    console.error('refreshCryptoAccount:', err);
     showToast('Failed to refresh crypto balance');
   } finally {
     btn.disabled = false;
     btn.textContent = '⟳ Refresh from Crypto.com';
   }
+}
+
+// ── BANK LINKING ─────────────────────────────────────────────────────
+async function startBankLink(accountId, bankName) {
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect/start', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + session.access_token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ account_id: accountId, bank_name: bankName })
+  });
+  if (!res.ok) { showToast('Failed to start bank link'); return; }
+  const { auth_url, session_id } = await res.json();
+
+  // Persist session_id and bank_name so completeBankLink can use them after the redirect
+  localStorage.setItem('eb_pending_session_id', session_id);
+  localStorage.setItem('eb_pending_bank_name', bankName);
+
+  // Redirect the current tab (not a popup) so it works on mobile too
+  window.location.href = auth_url;
+}
+
+async function completeBankLink(code, sessionId, accountId, bankName) {
+  showToast('Completing bank link…');
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect/finish', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + session.access_token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ code, session_id: sessionId, account_id: accountId, bank_name: bankName })
+  });
+  if (!res.ok) { showToast('Bank link failed'); return; }
+  const { linked_accounts } = await res.json();
+  showToast('Bank linked! ' + linked_accounts + ' account(s) connected.');
+  await loadBankConnections();
+  renderAccounts();
+  renderDashboard();
 }
 
 async function saveFromUpdate() {
