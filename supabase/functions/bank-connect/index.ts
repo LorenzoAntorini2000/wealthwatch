@@ -218,11 +218,14 @@ async function handleFinish(
 
   const finishData = await finishRes.json();
   console.log("Auth finish response:", JSON.stringify(finishData));
-  const accounts: Array<{ uid: string }> = finishData.accounts ?? [];
+  const allAccounts: Array<Record<string, unknown>> = finishData.accounts ?? finishData.account_ids ?? [];
+  // Filter out accounts without a uid (e.g. cards returned by some banks)
+  const accounts = allAccounts.filter((acc) => acc.uid);
+  console.log(`Accounts: ${allAccounts.length} total, ${accounts.length} with uid`);
   const consentExpiresAt: string | null = finishData.access?.valid_until ?? null;
 
   if (accounts.length === 0) {
-    return jsonError(502, "No accounts returned from Enable Banking");
+    return jsonError(502, "No linkable accounts returned from Enable Banking (no uid)");
   }
 
   // Insert one row per account UID returned by Enable Banking
