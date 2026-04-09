@@ -100,7 +100,7 @@ async function bootApp() {
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-email-display').textContent = currentUser.email;
 
-  await Promise.all([loadAccounts(), loadSnapshots()]);
+  await Promise.all([loadAccounts(), loadSnapshots(), loadBankConnections()]);
 
   // Check if we're returning from a bank authorisation redirect
   const urlParams = new URLSearchParams(window.location.search);
@@ -372,6 +372,26 @@ function renderAllocChart() {
 // ── ACCOUNTS ─────────────────────────────────────────────────────────
 const ICONS = { bank: '🏦', invest: '📈', crypto: '₿' };
 
+function timeAgo(iso) {
+  if (!iso) return 'never';
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+function bankLinkUI(a) {
+  const conn = bankConnections.find(c => c.account_id === a.id);
+  if (!conn) {
+    return `<button class="bank-link-btn" onclick="event.stopPropagation(); startBankLink('${a.id}', '${a.name.replace(/'/g, "\\'")}')">🔗 Link bank account</button>`;
+  }
+  if (conn.status === 'expired') {
+    return `<span class="bank-link-status expired" onclick="event.stopPropagation(); startBankLink('${a.id}', '${conn.bank_name.replace(/'/g, "\\'")}')">⚠ Consent expired · click to re-link</span>`;
+  }
+  return `<span class="bank-link-status linked">✓ Linked · synced ${timeAgo(conn.last_synced_at)}</span>`;
+}
+
 function renderAccounts() {
   ['bank', 'invest', 'crypto'].forEach(type => {
     const list = document.getElementById('list-' + type);
@@ -386,6 +406,7 @@ function renderAccounts() {
         <div class="acc-info">
           <div class="acc-name">${a.name}</div>
           ${a.note ? `<div class="acc-note">${a.note}</div>` : ''}
+          ${a.type === 'bank' ? bankLinkUI(a) : ''}
         </div>
         <div class="acc-balance">${fmt(a.balance)}</div>
       </div>
@@ -485,6 +506,8 @@ function renderUpdate() {
   `).join('');
   document.getElementById('crypto-refresh-section').style.display =
     accounts.some(a => a.type === 'crypto') ? '' : 'none';
+  document.getElementById('bank-refresh-section').style.display =
+    bankConnections.length > 0 ? '' : 'none';
 }
 
 async function fetchCryptoTotal() {
@@ -525,6 +548,34 @@ async function refreshCryptoAccount() {
   } finally {
     btn.disabled = false;
     btn.textContent = '⟳ Refresh from Crypto.com';
+  }
+}
+
+// ── BANK BALANCES ────────────────────────────────────────────────────
+async function refreshBankBalances() {
+  const btn = document.getElementById('refresh-bank-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Syncing…';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(SUPABASE_URL + '/functions/v1/bank-balance', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + session.access_token }
+    });
+    if (!res.ok) throw new Error('bank-balance error');
+    const { updated, errors } = await res.json();
+    await loadAccounts();
+    renderUpdate();
+    renderDashboard();
+    const msg = errors > 0
+      ? `Synced ${updated} account(s). ${errors} need re-authorisation.`
+      : `${updated} bank balance(s) updated.`;
+    showToast(msg);
+  } catch (err) {
+    showToast('Failed to sync bank balances');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟳ Sync bank balances';
   }
 }
 
