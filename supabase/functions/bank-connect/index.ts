@@ -153,7 +153,7 @@ async function handleStart(
   const authData = await authRes.json();
   console.log("Auth start response:", JSON.stringify(authData));
   const auth_url: string = authData.url;
-  const session_id: string = authData.auth_id ?? authData.session_id ?? authData.id;
+  const session_id: string = authData.authorization_id;
 
   if (!auth_url || !session_id) {
     console.error("Unexpected Enable Banking /auth response:", authData);
