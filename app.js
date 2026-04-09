@@ -529,22 +529,16 @@ async function refreshCryptoAccount() {
 }
 
 // ── BANK LINKING ─────────────────────────────────────────────────────
-async function startBankLink(accountId, bankName) {
+async function startBankLink(accountId, bankName, country = 'IT') {
   const { data: { session } } = await sb.auth.getSession();
-  console.log('[bank-connect] session:', session ? 'ok' : 'NULL', '| token prefix:', session?.access_token?.slice(0, 20));
-  const url = SUPABASE_URL + '/functions/v1/bank-connect';
-  console.log('[bank-connect] POST', url, { action: 'start', account_id: accountId, bank_name: bankName });
-  const res = await fetch(url, {
+  const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect', {
     method: 'POST',
     headers: {
-      'Authorization': 'Bearer ' + session?.access_token,
+      'Authorization': 'Bearer ' + session.access_token,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ action: 'start', account_id: accountId, bank_name: bankName })
+    body: JSON.stringify({ action: 'start', account_id: accountId, bank_name: bankName, country })
   });
-  console.log('[bank-connect] response status:', res.status, res.statusText);
-  const resBody = await res.clone().text();
-  console.log('[bank-connect] response body:', resBody);
   if (!res.ok) { showToast('Failed to start bank link'); return; }
   const { auth_url, session_id } = await res.json();
 
