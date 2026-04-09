@@ -116,22 +116,25 @@ async function handleStart(
     aspspList.find((a) => a.name.toLowerCase().includes(bank_name.toLowerCase()));
 
   if (!aspsp) {
-    return jsonError(404, `Bank not found: ${bank_name}`);
+    const available = aspspList.map((a) => a.name);
+    console.error("Bank not found:", bank_name, "| Available:", JSON.stringify(available));
+    return jsonError(404, `Bank not found: ${bank_name}. Available: ${available.join(", ")}`);
   }
 
   // POST to Enable Banking to start the consent session
+  console.log("Matched ASPSP:", JSON.stringify(aspsp));
   const validUntil = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
   let authRes: Response;
   try {
-    authRes = await fetch(`${ENABLE_BANKING_API}/auth/app`, {
+    authRes = await fetch(`${ENABLE_BANKING_API}/auth`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${ebJwt}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        aspsp: { name: aspsp.name, country: "IT" },
+        aspsp: { name: aspsp.name, country: aspsp.country },
         state: account_id,       // used to correlate the redirect callback
         redirect_url: redirectUrl,
         psu_type: "personal",
@@ -148,11 +151,12 @@ async function handleStart(
   }
 
   const authData = await authRes.json();
+  console.log("Auth start response:", JSON.stringify(authData));
   const auth_url: string = authData.url;
-  const session_id: string = authData.session_id;
+  const session_id: string = authData.auth_id ?? authData.session_id ?? authData.id;
 
   if (!auth_url || !session_id) {
-    console.error("Unexpected Enable Banking /auth/app response:", authData);
+    console.error("Unexpected Enable Banking /auth response:", authData);
     return jsonError(502, "Unexpected Enable Banking response");
   }
 
@@ -191,13 +195,13 @@ async function handleFinish(
   // Exchange the authorisation code for account UIDs
   let finishRes: Response;
   try {
-    finishRes = await fetch(`${ENABLE_BANKING_API}/auth/app/${session_id}`, {
+    finishRes = await fetch(`${ENABLE_BANKING_API}/sessions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${ebJwt}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, auth_id: session_id }),
     });
   } catch {
     return jsonError(502, "Failed to reach Enable Banking API");
@@ -209,6 +213,7 @@ async function handleFinish(
   }
 
   const finishData = await finishRes.json();
+  console.log("Auth finish response:", JSON.stringify(finishData));
   const accounts: Array<{ uid: string }> = finishData.accounts ?? [];
   const consentExpiresAt: string | null = finishData.access?.valid_until ?? null;
 
