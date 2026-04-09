@@ -275,7 +275,7 @@ async function buildEnableBankingJwt(
   const now = Math.floor(Date.now() / 1000);
   const headerB64 = b64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: appId }));
   const payloadB64 = b64url(
-    JSON.stringify({ iss: appId, iat: now, exp: now + 3600 }),
+    JSON.stringify({ iss: appId, aud: "enablebanking.com", iat: now, exp: now + 3600 }),
   );
   const signingInput = `${headerB64}.${payloadB64}`;
 
