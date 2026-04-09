@@ -531,13 +531,13 @@ async function refreshCryptoAccount() {
 // ── BANK LINKING ─────────────────────────────────────────────────────
 async function startBankLink(accountId, bankName) {
   const { data: { session } } = await sb.auth.getSession();
-  const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect/start', {
+  const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + session.access_token,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ account_id: accountId, bank_name: bankName })
+    body: JSON.stringify({ action: 'start', account_id: accountId, bank_name: bankName })
   });
   if (!res.ok) { showToast('Failed to start bank link'); return; }
   const { auth_url, session_id } = await res.json();
@@ -553,13 +553,13 @@ async function startBankLink(accountId, bankName) {
 async function completeBankLink(code, sessionId, accountId, bankName) {
   showToast('Completing bank link…');
   const { data: { session } } = await sb.auth.getSession();
-  const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect/finish', {
+  const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + session.access_token,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ code, session_id: sessionId, account_id: accountId, bank_name: bankName })
+    body: JSON.stringify({ action: 'finish', code, session_id: sessionId, account_id: accountId, bank_name: bankName })
   });
   if (!res.ok) { showToast('Bank link failed'); return; }
   const { linked_accounts } = await res.json();

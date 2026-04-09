@@ -46,14 +46,21 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: `Bearer ${token}` } } },
   );
 
-  // Route on URL path suffix
-  const pathname = new URL(req.url).pathname;
-  if (pathname.endsWith("/start")) {
-    return await handleStart(req, appId, privateKeyPem);
-  } else if (pathname.endsWith("/finish")) {
-    return await handleFinish(req, user.id, appId, privateKeyPem, supabaseUser);
+  // Route on action field in request body
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, "Invalid JSON body");
   }
-  return jsonError(404, "Not found");
+
+  const action = body.action as string | undefined;
+  if (action === "start") {
+    return await handleStart(body, appId, privateKeyPem);
+  } else if (action === "finish") {
+    return await handleFinish(body, user.id, appId, privateKeyPem, supabaseUser);
+  }
+  return jsonError(400, 'Missing or invalid action (expected "start" or "finish")');
 });
 
 // ---------------------------------------------------------------------------
@@ -61,18 +68,11 @@ Deno.serve(async (req) => {
 // ---------------------------------------------------------------------------
 
 async function handleStart(
-  req: Request,
+  body: Record<string, unknown>,
   appId: string,
   privateKeyPem: string,
 ): Promise<Response> {
-  let body: { bank_name: string; account_id: string };
-  try {
-    body = await req.json();
-  } catch {
-    return jsonError(400, "Invalid JSON body");
-  }
-
-  const { bank_name, account_id } = body;
+  const { bank_name, account_id } = body as { bank_name: string; account_id: string };
   if (!bank_name || !account_id) {
     return jsonError(400, "Missing bank_name or account_id");
   }
@@ -164,25 +164,18 @@ async function handleStart(
 // ---------------------------------------------------------------------------
 
 async function handleFinish(
-  req: Request,
+  body: Record<string, unknown>,
   userId: string,
   appId: string,
   privateKeyPem: string,
   supabase: ReturnType<typeof createClient>,
 ): Promise<Response> {
-  let body: {
+  const { code, session_id, account_id, bank_name = "" } = body as {
     code: string;
     session_id: string;
     account_id: string;
-    bank_name?: string;   // optional — frontend should pass this for DB storage
+    bank_name?: string;
   };
-  try {
-    body = await req.json();
-  } catch {
-    return jsonError(400, "Invalid JSON body");
-  }
-
-  const { code, session_id, account_id, bank_name = "" } = body;
   if (!code || !session_id || !account_id) {
     return jsonError(400, "Missing code, session_id, or account_id");
   }
