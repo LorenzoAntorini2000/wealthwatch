@@ -10,3 +10,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/bank-connect/deno.json"
 entrypoint = "./functions/bank-connect/index.ts"
+
+[functions.bank-balance]
+enabled = true
+verify_jwt = false
+import_map = "./functions/bank-balance/deno.json"
+entrypoint = "./functions/bank-balance/index.ts"
