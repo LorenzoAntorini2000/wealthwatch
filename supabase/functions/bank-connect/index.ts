@@ -72,7 +72,11 @@ async function handleStart(
   appId: string,
   privateKeyPem: string,
 ): Promise<Response> {
-  const { bank_name, account_id } = body as { bank_name: string; account_id: string };
+  const { bank_name, account_id, country = "IT" } = body as {
+    bank_name: string;
+    account_id: string;
+    country?: string;
+  };
   if (!bank_name || !account_id) {
     return jsonError(400, "Missing bank_name or account_id");
   }
@@ -93,7 +97,7 @@ async function handleStart(
   // Find the ASPSP matching the given bank name
   let aspspRes: Response;
   try {
-    aspspRes = await fetch(`${ENABLE_BANKING_API}/aspsps?country=IT`, {
+    aspspRes = await fetch(`${ENABLE_BANKING_API}/aspsps?country=${country}`, {
       headers: { Authorization: `Bearer ${ebJwt}` },
     });
   } catch {
@@ -138,7 +142,7 @@ async function handleStart(
         state: account_id,       // used to correlate the redirect callback
         redirect_url: redirectUrl,
         psu_type: "personal",
-        access: { valid_until: validUntil },
+        access: { valid_until: validUntil, balances: true, transactions: true },
       }),
     });
   } catch {
