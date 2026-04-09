@@ -218,7 +218,8 @@ async function handleFinish(
 
   const finishData = await finishRes.json();
   console.log("Auth finish response:", JSON.stringify(finishData));
-  const accounts: Array<{ uid: string }> = finishData.accounts ?? [];
+  const accounts: Array<Record<string, unknown>> = finishData.accounts ?? finishData.account_ids ?? [];
+  console.log("Accounts array:", JSON.stringify(accounts));
   const consentExpiresAt: string | null = finishData.access?.valid_until ?? null;
 
   if (accounts.length === 0) {
@@ -230,7 +231,7 @@ async function handleFinish(
     user_id: userId,
     account_id,
     eb_session_id: session_id,
-    eb_account_uid: acc.uid,
+    eb_account_uid: acc.uid ?? acc.account_id ?? acc.id ?? acc.resource_id,
     bank_name,
     consent_expires_at: consentExpiresAt,
     status: "active",
