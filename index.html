@@ -206,6 +206,9 @@
         <div id="bank-refresh-section" class="update-actions" style="display:none">
           <button id="refresh-bank-btn" class="btn-ghost full-width" onclick="refreshBankBalances()">⟳ Sync bank balances</button>
         </div>
+        <div id="ibkr-refresh-section" class="update-actions" style="display:none">
+          <button id="refresh-ibkr-btn" class="btn-ghost full-width" onclick="refreshIbkrBalance()">⟳ Sync IBKR balance</button>
+        </div>
         <div class="update-actions">
           <button class="btn-primary full-width" onclick="saveFromUpdate()">Save &amp; take snapshot</button>
         </div>
@@ -262,6 +265,23 @@
       <div class="modal-actions">
         <button class="btn-ghost" onclick="closeBankLinkModal()">Cancel</button>
         <button class="btn-primary" onclick="confirmBankLink()">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IBKR LINK MODAL -->
+  <div class="modal-overlay" id="ibkr-link-modal" onclick="closeIbkrLinkModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h2 class="modal-title">Link IBKR account</h2>
+      <input type="hidden" id="il-account-id">
+      <div class="form-field">
+        <label>IBKR Account ID</label>
+        <input type="text" id="il-ibkr-id" placeholder="e.g. U1234567" style="text-transform:uppercase">
+      </div>
+      <div id="il-error" class="auth-error" style="display:none"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeIbkrLinkModal()">Cancel</button>
+        <button class="btn-primary" onclick="confirmIbkrLink()">Connect</button>
       </div>
     </div>
   </div>

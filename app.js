@@ -12,6 +12,7 @@ let currentUser = null;
 let accounts = [];
 let snapshots = [];
 let bankConnections = [];
+let ibkrConnections = [];
 
 // ── FORMATTING ──────────────────────────────────────────────────────
 function fmt(n) {
@@ -100,7 +101,7 @@ async function bootApp() {
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-email-display').textContent = currentUser.email;
 
-  await Promise.all([loadAccounts(), loadSnapshots(), loadBankConnections()]);
+  await Promise.all([loadAccounts(), loadSnapshots(), loadBankConnections(), loadIbkrConnections()]);
 
   // Check if we're returning from a bank authorisation redirect
   const urlParams = new URLSearchParams(window.location.search);
@@ -140,6 +141,11 @@ async function loadSnapshots() {
 async function loadBankConnections() {
   const { data, error } = await sb.from('bank_connections').select('*').order('created_at');
   if (!error) bankConnections = data || [];
+}
+
+async function loadIbkrConnections() {
+  const { data, error } = await sb.from('ibkr_connections').select('*').order('created_at');
+  if (!error) ibkrConnections = data || [];
 }
 
 // ── TOTALS ──────────────────────────────────────────────────────────
@@ -383,6 +389,14 @@ function timeAgo(iso) {
   return Math.floor(diff / 86400) + 'd ago';
 }
 
+function ibkrLinkUI(a) {
+  const conn = ibkrConnections.find(c => c.account_id === a.id);
+  if (!conn) {
+    return `<button class="bank-link-btn" onclick="event.stopPropagation(); openIbkrLinkModal('${a.id}')">🔗 Link IBKR account</button>`;
+  }
+  return `<span class="bank-link-status linked">✓ IBKR linked · synced ${timeAgo(conn.last_synced_at)}</span>`;
+}
+
 function bankLinkUI(a) {
   const conn = bankConnections.find(c => c.account_id === a.id);
   if (!conn) {
@@ -409,6 +423,7 @@ function renderAccounts() {
           <div class="acc-name">${a.name}</div>
           ${a.note ? `<div class="acc-note">${a.note}</div>` : ''}
           ${a.type === 'bank' ? bankLinkUI(a) : ''}
+          ${a.type === 'invest' ? ibkrLinkUI(a) : ''}
         </div>
         <div class="acc-balance">${fmt(a.balance)}</div>
       </div>
@@ -510,6 +525,8 @@ function renderUpdate() {
     accounts.some(a => a.type === 'crypto') ? '' : 'none';
   document.getElementById('bank-refresh-section').style.display =
     bankConnections.length > 0 ? '' : 'none';
+  document.getElementById('ibkr-refresh-section').style.display =
+    ibkrConnections.length > 0 ? '' : 'none';
 }
 
 async function fetchCryptoTotal() {
@@ -550,6 +567,71 @@ async function refreshCryptoAccount() {
   } finally {
     btn.disabled = false;
     btn.textContent = '⟳ Refresh from Crypto.com';
+  }
+}
+
+// ── IBKR LINKING ─────────────────────────────────────────────────────
+function openIbkrLinkModal(accountId) {
+  document.getElementById('il-account-id').value = accountId;
+  document.getElementById('il-ibkr-id').value = '';
+  document.getElementById('il-error').style.display = 'none';
+  document.getElementById('ibkr-link-modal').classList.add('open');
+  setTimeout(() => document.getElementById('il-ibkr-id').focus(), 50);
+}
+
+function closeIbkrLinkModal() {
+  document.getElementById('ibkr-link-modal').classList.remove('open');
+}
+
+async function confirmIbkrLink() {
+  const accountId = document.getElementById('il-account-id').value;
+  const ibkrAccountId = document.getElementById('il-ibkr-id').value.trim().toUpperCase();
+  const errEl = document.getElementById('il-error');
+  if (!ibkrAccountId) {
+    errEl.textContent = 'Please enter your IBKR account ID.';
+    errEl.style.display = 'block';
+    return;
+  }
+  closeIbkrLinkModal();
+
+  const { error } = await sb.from('ibkr_connections').insert({
+    user_id: currentUser.id,
+    account_id: accountId,
+    ibkr_account_id: ibkrAccountId,
+    status: 'active',
+  });
+
+  if (error) { showToast('Failed to link IBKR account'); return; }
+  await loadIbkrConnections();
+  renderAccounts();
+  showToast('IBKR account linked');
+}
+
+// ── IBKR BALANCE ──────────────────────────────────────────────────────
+async function refreshIbkrBalance() {
+  const btn = document.getElementById('refresh-ibkr-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Syncing…';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(SUPABASE_URL + '/functions/v1/ibkr-balance', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + session.access_token }
+    });
+    if (!res.ok) throw new Error('ibkr-balance error');
+    const { updated, errors } = await res.json();
+    await loadAccounts();
+    renderUpdate();
+    renderDashboard();
+    const msg = errors > 0
+      ? `Synced ${updated} account(s). ${errors} failed.`
+      : `${updated} IBKR balance(s) updated.`;
+    showToast(msg);
+  } catch (err) {
+    showToast('Failed to sync IBKR balance');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟳ Sync IBKR balance';
   }
 }
 
@@ -766,7 +848,7 @@ async function deleteAccount() {
 
 // ── KEYBOARD ──────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closeBankLinkModal(); }
+  if (e.key === 'Escape') { closeModal(); closeBankLinkModal(); closeIbkrLinkModal(); }
   if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('open')) saveAccount();
   if (e.key === 'Enter' && document.getElementById('auth-screen').style.display !== 'none') handleAuth();
 });
