@@ -178,11 +178,12 @@ async function handleFinish(
   privateKeyPem: string,
   supabase: ReturnType<typeof createClient>,
 ): Promise<Response> {
-  const { code, session_id, account_id, bank_name = "" } = body as {
+  const { code, session_id, account_id, bank_name = "", country = "IT" } = body as {
     code: string;
     session_id: string;
     account_id: string;
     bank_name?: string;
+    country?: string;
   };
   if (!code || !session_id || !account_id) {
     return jsonError(400, "Missing code, session_id, or account_id");
@@ -235,6 +236,7 @@ async function handleFinish(
     eb_session_id: session_id,
     eb_account_uid: acc.uid,
     bank_name,
+    country,
     consent_expires_at: consentExpiresAt,
     status: "active",
   }));

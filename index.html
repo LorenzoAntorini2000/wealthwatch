@@ -245,6 +245,27 @@
     </div>
   </div>
 
+  <!-- BANK LINK MODAL -->
+  <div class="modal-overlay" id="bank-link-modal" onclick="closeBankLinkModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h2 class="modal-title">Link bank account</h2>
+      <input type="hidden" id="bl-account-id">
+      <div class="form-field">
+        <label>Bank name</label>
+        <input type="text" id="bl-bank-name" placeholder="e.g. Société Générale">
+      </div>
+      <div class="form-field">
+        <label>Country code</label>
+        <input type="text" id="bl-country" placeholder="e.g. FR" maxlength="2" style="text-transform:uppercase">
+      </div>
+      <div id="bl-error" class="auth-error" style="display:none"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeBankLinkModal()">Cancel</button>
+        <button class="btn-primary" onclick="confirmBankLink()">Connect</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
   <script src="app.js"></script>
 </body>

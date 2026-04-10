@@ -1,0 +1,1 @@
+ALTER TABLE bank_connections ADD COLUMN IF NOT EXISTS country text NOT NULL DEFAULT 'IT';
