@@ -176,36 +176,35 @@ let currentNWCategory = '';
 let currentNWBlockId = null;
 let allocModeBlock = false;
 
-function setChartFilter(category, btn) {
+function setChartFilter(category) {
   currentNWCategory = category || '';
   currentNWBlockId = null;
-  document.querySelectorAll('#chart-cat-filters .filter-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
   renderBlockFilters();
   renderNWChart();
 }
 
 function renderBlockFilters() {
-  const container = document.getElementById('chart-block-filters');
+  const select = document.getElementById('chart-block-select');
   if (!currentNWCategory) {
-    container.innerHTML = '';
+    select.style.display = 'none';
+    select.innerHTML = '';
     return;
   }
   const blocks = accounts.filter(a => a.type === currentNWCategory);
   if (!blocks.length) {
-    container.innerHTML = '<span class="small-text">No blocks in this category.</span>';
+    select.style.display = 'none';
     return;
   }
-  container.innerHTML = `
-    <button class="filter-btn ${currentNWBlockId ? '' : 'active'}" onclick="setNWBlockFilter(null, this)">All</button>
-    ${blocks.map(b => `<button class="filter-btn ${currentNWBlockId === b.id ? 'active' : ''}" onclick="setNWBlockFilter('${b.id}', this)">${b.name}</button>`).join('')}
+  select.innerHTML = `
+    <option value="">All accounts</option>
+    ${blocks.map(b => `<option value="${b.id}">${b.name}</option>`).join('')}
   `;
+  select.value = currentNWBlockId || '';
+  select.style.display = '';
 }
 
-function setNWBlockFilter(blockId, btn) {
+function setNWBlockFilter(blockId) {
   currentNWBlockId = blockId || null;
-  document.querySelectorAll('#chart-block-filters .filter-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
   renderNWChart();
 }
 

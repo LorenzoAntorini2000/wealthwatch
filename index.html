@@ -134,13 +134,15 @@
               <button class="range-btn" onclick="setRange(0, this)">All</button>
             </div>
           </div>
-          <div class="chart-filters" id="chart-cat-filters">
-            <button class="filter-btn active" data-cat="" onclick="setChartFilter(null, this)">All</button>
-            <button class="filter-btn" data-cat="bank" onclick="setChartFilter('bank', this)">Bank</button>
-            <button class="filter-btn" data-cat="invest" onclick="setChartFilter('invest', this)">Investments</button>
-            <button class="filter-btn" data-cat="crypto" onclick="setChartFilter('crypto', this)">Crypto</button>
+          <div class="chart-filter-row">
+            <select class="filter-select" id="chart-cat-select" onchange="setChartFilter(this.value)">
+              <option value="">All categories</option>
+              <option value="bank">Bank</option>
+              <option value="invest">Investments</option>
+              <option value="crypto">Crypto</option>
+            </select>
+            <select class="filter-select" id="chart-block-select" onchange="setNWBlockFilter(this.value)" style="display:none"></select>
           </div>
-          <div class="chart-filters chart-block-filters" id="chart-block-filters"></div>
           <div class="chart-wrap"><canvas id="nwChart"></canvas></div>
         </div>
         <div class="chart-section">
