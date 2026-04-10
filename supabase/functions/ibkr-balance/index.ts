@@ -18,7 +18,9 @@ Deno.serve(async (req) => {
 
   // 1. Verify Supabase JWT
   const authHeader = req.headers.get("Authorization");
+  console.log("[ibkr] authHeader present:", !!authHeader);
   if (!authHeader?.startsWith("Bearer ")) {
+    console.log("[ibkr] missing/invalid auth header");
     return jsonError(401, "Missing or invalid Authorization header");
   }
   const token = authHeader.slice(7);
@@ -29,6 +31,7 @@ Deno.serve(async (req) => {
   );
 
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  console.log("[ibkr] getUser result — user:", !!user, "error:", authError?.message);
   if (authError || !user) {
     return jsonError(401, "Invalid or expired session");
   }
