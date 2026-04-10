@@ -83,16 +83,14 @@ Deno.serve(async (req) => {
     const sendXml = await sendRes.text();
     console.log("IBKR SendRequest response:", sendXml);
 
-    const sendDoc = new DOMParser().parseFromString(sendXml, "text/xml");
-    const status = sendDoc.querySelector("Status")?.textContent?.trim();
-
+    const status = sendXml.match(/<Status>(.*?)<\/Status>/)?.[1]?.trim();
     if (status !== "Success") {
       console.error("IBKR SendRequest status:", status);
       return jsonError(502, "IBKR token invalid");
     }
 
-    referenceCode = sendDoc.querySelector("ReferenceCode")?.textContent?.trim() ?? "";
-    retrievalUrl = sendDoc.querySelector("Url")?.textContent?.trim() ?? "";
+    referenceCode = sendXml.match(/<ReferenceCode>(.*?)<\/ReferenceCode>/)?.[1]?.trim() ?? "";
+    retrievalUrl = sendXml.match(/<Url>(.*?)<\/Url>/)?.[1]?.trim() ?? "";
 
     if (!referenceCode || !retrievalUrl) {
       console.error("IBKR SendRequest missing ReferenceCode or Url in:", sendXml);
@@ -145,31 +143,19 @@ Deno.serve(async (req) => {
 
   // 7. Parse XML — extract total NAV from EquitySummaryByReportDateInBase
   let navValue: number | null = null;
-  try {
-    const doc = new DOMParser().parseFromString(statementXml, "text/xml");
 
-    // Primary: EquitySummaryByReportDateInBase total attribute
-    const equitySummary = doc.querySelector("EquitySummaryByReportDateInBase");
-    if (equitySummary) {
-      const totalAttr = equitySummary.getAttribute("total");
-      if (totalAttr !== null && totalAttr !== "") {
-        navValue = parseFloat(totalAttr);
-      }
-    }
+  // Primary: EquitySummaryByReportDateInBase total="..." attribute
+  const equityMatch = statementXml.match(/<EquitySummaryByReportDateInBase[^>]*\stotal="([^"]+)"/);
+  if (equityMatch) {
+    navValue = parseFloat(equityMatch[1]);
+  }
 
-    // Fallback: NetAssetValue element with total attribute
-    if (navValue === null || isNaN(navValue)) {
-      const nav = doc.querySelector("NetAssetValue");
-      if (nav) {
-        const totalAttr = nav.getAttribute("total");
-        if (totalAttr !== null && totalAttr !== "") {
-          navValue = parseFloat(totalAttr);
-        }
-      }
+  // Fallback: NetAssetValue total="..." attribute
+  if (navValue === null || isNaN(navValue)) {
+    const navMatch = statementXml.match(/<NetAssetValue[^>]*\stotal="([^"]+)"/);
+    if (navMatch) {
+      navValue = parseFloat(navMatch[1]);
     }
-  } catch (e) {
-    console.error("XML parse error:", e);
-    return jsonError(502, "IBKR response parse error");
   }
 
   if (navValue === null || isNaN(navValue)) {
