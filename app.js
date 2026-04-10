@@ -113,11 +113,13 @@ async function bootApp() {
 
     const sessionId = localStorage.getItem('eb_pending_session_id');
     const bankName  = localStorage.getItem('eb_pending_bank_name') || '';
+    const country   = localStorage.getItem('eb_pending_bank_country') || 'IT';
     localStorage.removeItem('eb_pending_session_id');
     localStorage.removeItem('eb_pending_bank_name');
+    localStorage.removeItem('eb_pending_bank_country');
 
     if (sessionId) {
-      await completeBankLink(authCode, sessionId, accountId, bankName);
+      await completeBankLink(authCode, sessionId, accountId, bankName, country);
     }
   }
 
@@ -384,10 +386,10 @@ function timeAgo(iso) {
 function bankLinkUI(a) {
   const conn = bankConnections.find(c => c.account_id === a.id);
   if (!conn) {
-    return `<button class="bank-link-btn" onclick="event.stopPropagation(); startBankLink('${a.id}', '${a.name.replace(/'/g, "\\'")}')">🔗 Link bank account</button>`;
+    return `<button class="bank-link-btn" onclick="event.stopPropagation(); openBankLinkModal('${a.id}')">🔗 Link bank account</button>`;
   }
   if (conn.status === 'expired') {
-    return `<span class="bank-link-status expired" onclick="event.stopPropagation(); startBankLink('${a.id}', '${conn.bank_name.replace(/'/g, "\\'")}')">⚠ Consent expired · click to re-link</span>`;
+    return `<span class="bank-link-status expired" onclick="event.stopPropagation(); startBankLink('${a.id}', '${conn.bank_name.replace(/'/g, "\\'")}', '${conn.country}')">⚠ Consent expired · click to re-link</span>`;
   }
   return `<span class="bank-link-status linked">✓ Linked · synced ${timeAgo(conn.last_synced_at)}</span>`;
 }
@@ -580,6 +582,33 @@ async function refreshBankBalances() {
 }
 
 // ── BANK LINKING ─────────────────────────────────────────────────────
+function openBankLinkModal(accountId) {
+  document.getElementById('bl-account-id').value = accountId;
+  document.getElementById('bl-bank-name').value = '';
+  document.getElementById('bl-country').value = 'IT';
+  document.getElementById('bl-error').style.display = 'none';
+  document.getElementById('bank-link-modal').classList.add('open');
+  setTimeout(() => document.getElementById('bl-bank-name').focus(), 50);
+}
+
+function closeBankLinkModal() {
+  document.getElementById('bank-link-modal').classList.remove('open');
+}
+
+async function confirmBankLink() {
+  const accountId = document.getElementById('bl-account-id').value;
+  const bankName  = document.getElementById('bl-bank-name').value.trim();
+  const country   = document.getElementById('bl-country').value.trim().toUpperCase();
+  const errEl     = document.getElementById('bl-error');
+  if (!bankName || !country) {
+    errEl.textContent = 'Please fill in both fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+  closeBankLinkModal();
+  await startBankLink(accountId, bankName, country);
+}
+
 async function startBankLink(accountId, bankName, country = 'IT') {
   const { data: { session } } = await sb.auth.getSession();
   const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect', {
@@ -596,12 +625,13 @@ async function startBankLink(accountId, bankName, country = 'IT') {
   // Persist session_id and bank_name so completeBankLink can use them after the redirect
   localStorage.setItem('eb_pending_session_id', session_id);
   localStorage.setItem('eb_pending_bank_name', bankName);
+  localStorage.setItem('eb_pending_bank_country', country);
 
   // Redirect the current tab (not a popup) so it works on mobile too
   window.location.href = auth_url;
 }
 
-async function completeBankLink(code, sessionId, accountId, bankName) {
+async function completeBankLink(code, sessionId, accountId, bankName, country = 'IT') {
   showToast('Completing bank link…');
   const { data: { session } } = await sb.auth.getSession();
   const res = await fetch(SUPABASE_URL + '/functions/v1/bank-connect', {
@@ -610,7 +640,7 @@ async function completeBankLink(code, sessionId, accountId, bankName) {
       'Authorization': 'Bearer ' + session.access_token,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ action: 'finish', code, session_id: sessionId, account_id: accountId, bank_name: bankName })
+    body: JSON.stringify({ action: 'finish', code, session_id: sessionId, account_id: accountId, bank_name: bankName, country })
   });
   if (!res.ok) { showToast('Bank link failed'); return; }
   const { linked_accounts } = await res.json();
@@ -736,7 +766,7 @@ async function deleteAccount() {
 
 // ── KEYBOARD ──────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); closeBankLinkModal(); }
   if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('open')) saveAccount();
   if (e.key === 'Enter' && document.getElementById('auth-screen').style.display !== 'none') handleAuth();
 });
