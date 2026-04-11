@@ -174,7 +174,7 @@ let allocChart = null;
 let currentRange = 3;
 let currentNWCategory = '';
 let currentNWBlockId = null;
-let allocModeBlock = false;
+let allocCategory = null;
 
 function setChartFilter(category) {
   currentNWCategory = category || '';
@@ -208,10 +208,12 @@ function setNWBlockFilter(blockId) {
   renderNWChart();
 }
 
-function setAllocView(isBlock, btn) {
-  allocModeBlock = isBlock;
-  document.getElementById('alloc-cat-btn').classList.toggle('active', !isBlock);
-  document.getElementById('alloc-block-btn').classList.toggle('active', isBlock);
+function setAllocCategory(cat, btn) {
+  allocCategory = (allocCategory === cat) ? null : cat;
+  document.querySelectorAll('.alloc-cat-btn').forEach(b => b.classList.remove('active', 'active-bank', 'active-invest', 'active-crypto'));
+  if (allocCategory) {
+    btn.classList.add('active', `active-${allocCategory}`);
+  }
   renderAllocChart();
 }
 
@@ -328,7 +330,7 @@ function renderAllocChart() {
   let data = [];
   let colors = [];
 
-  if (!allocModeBlock) {
+  if (!allocCategory) {
     const bank = totalByType('bank');
     const invest = totalByType('invest');
     const crypto = totalByType('crypto');
@@ -336,11 +338,16 @@ function renderAllocChart() {
     data = [bank, invest, crypto];
     colors = ['#2563eb', '#16a34a', '#d97706'];
   } else {
-    labels = accounts.map(a => a.name || 'Unnamed');
-    data = accounts.map(a => parseFloat(a.balance) || 0);
-    colors = accounts.map((_, idx) => [
-      '#2563eb', '#16a34a', '#d97706', '#9333ea', '#14b8a6', '#f59e0b', '#db2777', '#0ea5e9'
-    ][idx % 8]);
+    const catColors = {
+      bank:   ['#2563eb','#3b82f6','#1d4ed8','#60a5fa','#93c5fd','#1e40af','#bfdbfe','#172554'],
+      invest: ['#16a34a','#22c55e','#15803d','#4ade80','#86efac','#166534','#dcfce7','#052e16'],
+      crypto: ['#d97706','#f59e0b','#b45309','#fbbf24','#fde68a','#92400e','#fef3c7','#451a03'],
+    };
+    const palette = catColors[allocCategory];
+    const filtered = accounts.filter(a => a.type === allocCategory);
+    labels = filtered.map(a => a.name || 'Unnamed');
+    data = filtered.map(a => parseFloat(a.balance) || 0);
+    colors = filtered.map((_, idx) => palette[idx % palette.length]);
   }
 
   const total = data.reduce((sum, x) => sum + x, 0) || 1;

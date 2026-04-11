@@ -388,6 +388,9 @@ body {
 }
 .range-btn:hover { border-color: var(--border-strong); color: var(--text-muted); }
 .range-btn.active { background: var(--surface2); border-color: var(--border-strong); color: var(--accent); }
+.range-btn.active-bank   { border-color: var(--bank);   color: var(--bank); }
+.range-btn.active-invest { border-color: var(--invest); color: var(--invest); }
+.range-btn.active-crypto { border-color: var(--crypto); color: var(--crypto); }
 
 .alloc-wrap {
   display: flex;

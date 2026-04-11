@@ -149,8 +149,9 @@
           <div class="chart-header">
             <h2 class="chart-title">Allocation</h2>
             <div class="chart-range">
-              <button class="range-btn active" id="alloc-cat-btn" onclick="setAllocView(false, this)">By category</button>
-              <button class="range-btn" id="alloc-block-btn" onclick="setAllocView(true, this)">By block</button>
+              <button class="range-btn alloc-cat-btn" id="alloc-bank-btn" onclick="setAllocCategory('bank', this)">Bank</button>
+              <button class="range-btn alloc-cat-btn" id="alloc-invest-btn" onclick="setAllocCategory('invest', this)">Investments</button>
+              <button class="range-btn alloc-cat-btn" id="alloc-crypto-btn" onclick="setAllocCategory('crypto', this)">Crypto</button>
             </div>
           </div>
           <div class="alloc-wrap">
