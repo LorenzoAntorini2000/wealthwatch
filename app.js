@@ -406,6 +406,9 @@ function bankLinkUI(a) {
   if (conn.status === 'expired') {
     return `<span class="bank-link-status expired" onclick="event.stopPropagation(); startBankLink('${a.id}', '${conn.bank_name.replace(/'/g, "\\'")}', '${conn.country}')">⚠ Consent expired · click to re-link</span>`;
   }
+  if (conn.status === 'error') {
+    return `<span class="bank-link-status expired" onclick="event.stopPropagation(); startBankLink('${a.id}', '${conn.bank_name.replace(/'/g, "\\'")}', '${conn.country}')">⚠ Sync failed · click to re-link</span>`;
+  }
   return `<span class="bank-link-status linked">✓ Linked · synced ${timeAgo(conn.last_synced_at)}</span>`;
 }
 

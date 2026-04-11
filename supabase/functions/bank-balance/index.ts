@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
     .from("bank_connections")
     .select("*")
     .eq("user_id", userId)
-    .eq("status", "active");
+    .in("status", ["active", "error"]);
 
   if (connError) {
     console.error("Failed to load bank_connections:", connError);
@@ -118,6 +118,10 @@ Deno.serve(async (req) => {
 
       if (!balRes.ok) {
         console.error(`Balance fetch failed for ${conn.id}:`, balRes.status, await balRes.text());
+        await supabaseUser
+          .from("bank_connections")
+          .update({ status: "error" })
+          .eq("id", conn.id);
         errors++;
         continue;
       }
@@ -138,6 +142,10 @@ Deno.serve(async (req) => {
 
       if (!picked) {
         console.error(`No balance found for connection ${conn.id}`);
+        await supabaseUser
+          .from("bank_connections")
+          .update({ status: "error" })
+          .eq("id", conn.id);
         errors++;
         continue;
       }
@@ -157,10 +165,10 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Update last_synced_at on the connection
+      // Update last_synced_at and reset status to active on the connection
       await supabaseUser
         .from("bank_connections")
-        .update({ last_synced_at: new Date().toISOString() })
+        .update({ last_synced_at: new Date().toISOString(), status: "active" })
         .eq("id", conn.id);
 
       results.push({
@@ -172,6 +180,10 @@ Deno.serve(async (req) => {
       updated++;
     } catch (e) {
       console.error(`Unexpected error for connection ${conn.id}:`, e);
+      await supabaseUser
+        .from("bank_connections")
+        .update({ status: "error" })
+        .eq("id", conn.id);
       errors++;
     }
   }
