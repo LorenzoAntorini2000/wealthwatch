@@ -15,17 +15,15 @@ export async function getUserSecret(
   userId: string,
   key: string,
 ): Promise<string | null> {
-  const { data, error } = await client
-    .from("user_secrets_decrypted")   // see view definition below
-    .select("decrypted_value")
-    .eq("user_id", userId)
-    .eq("key", key)
-    .maybeSingle();
+  const { data, error } = await client.rpc("get_decrypted_secret", {
+    p_user_id: userId,
+    p_key: key,
+  });
 
   if (error) {
     console.error(`getUserSecret(${key}):`, error.message);
     return null;
   }
 
-  return (data?.decrypted_value as string) ?? null;
+  return (data as string) ?? null;
 }
