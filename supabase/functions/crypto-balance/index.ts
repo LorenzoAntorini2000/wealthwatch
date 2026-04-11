@@ -1,6 +1,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
+import { getUserSecret } from "../_shared/getUserSecret.ts";
 
 const CRYPTOCOM_API_URL =
   "https://api.crypto.com/exchange/v1/private/user-balance";
@@ -20,30 +21,43 @@ Deno.serve(async (req) => {
 
   // 1. Verify caller: accept a user JWT or the service-role key (from daily-snapshot)
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!authHeader?.startsWith("Bearer ")) {
     return jsonError(401, "Missing or invalid Authorization header");
   }
   const token = authHeader.slice(7);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const isServiceRole = token === serviceRoleKey;
 
-  if (token !== serviceRoleKey) {
-    // User JWT path
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-    );
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  let userId: string;
+
+  if (isServiceRole) {
+    // Called server-side from daily-snapshot: user_id must be in the request body
+    let body: Record<string, unknown> = {};
+    try { body = await req.json(); } catch { /* empty body is fine */ }
+    if (!body.user_id || typeof body.user_id !== "string") {
+      return jsonError(400, "user_id is required when calling with service-role key");
+    }
+    userId = body.user_id;
+  } else {
+    // User JWT path: verify token and extract user id
+    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
     if (authError || !user) {
       return jsonError(401, "Invalid or expired session");
     }
+    userId = user.id;
   }
-  // Service-role path falls through — no user-specific DB ops in this function
 
-  // 2. Read API credentials from environment secrets
-  const apiKey = Deno.env.get("CRYPTOCOM_API_KEY");
-  const secret = Deno.env.get("CRYPTOCOM_SECRET");
+  // 2. Read per-user API credentials from Vault via service-role client
+  // (vault.decrypted_secrets is not accessible to the anon/authenticated role)
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+  const apiKey = await getUserSecret(adminClient, userId, "cryptocom_api_key");
+  const secret = await getUserSecret(adminClient, userId, "cryptocom_secret");
   if (!apiKey || !secret) {
-    return jsonError(500, "Server misconfiguration: missing API credentials");
+    return jsonError(400, "Crypto.com credentials not configured. Please add them in Settings.");
   }
 
   // 3. Build Crypto.com request body
