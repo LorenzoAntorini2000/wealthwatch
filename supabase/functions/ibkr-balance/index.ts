@@ -1,6 +1,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
+import { getUserSecret } from "../_shared/getUserSecret.ts";
 
 const FLEX_SEND_REQUEST_URL =
   "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest";
@@ -62,11 +63,16 @@ Deno.serve(async (req) => {
     );
   }
 
-  // 2. Read IBKR Flex secrets
-  const flexToken = Deno.env.get("IBKR_FLEX_TOKEN");
-  const queryId = Deno.env.get("IBKR_FLEX_QUERY_ID");
+  // 2. Read per-user IBKR Flex credentials from Vault
+  const adminClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    serviceRoleKey,
+    { auth: { persistSession: false } },
+  );
+  const flexToken = await getUserSecret(adminClient, userId, "ibkr_flex_token");
+  const queryId = await getUserSecret(adminClient, userId, "ibkr_flex_query_id");
   if (!flexToken || !queryId) {
-    return jsonError(500, "Server misconfiguration: missing IBKR credentials");
+    return jsonError(400, "IBKR credentials not configured. Please add them in Settings.");
   }
 
   // 3. Load active IBKR connections for this user
