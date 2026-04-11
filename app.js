@@ -12,6 +12,7 @@ let currentUser = null;
 let accounts = [];
 let snapshots = [];
 let bankConnections = [];
+let ibkrConnections = [];
 
 // ── FORMATTING ──────────────────────────────────────────────────────
 function fmt(n) {
@@ -100,7 +101,7 @@ async function bootApp() {
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-email-display').textContent = currentUser.email;
 
-  await Promise.all([loadAccounts(), loadSnapshots(), loadBankConnections()]);
+  await Promise.all([loadAccounts(), loadSnapshots(), loadBankConnections(), loadIbkrConnections()]);
 
   // Check if we're returning from a bank authorisation redirect
   const urlParams = new URLSearchParams(window.location.search);
@@ -142,6 +143,11 @@ async function loadBankConnections() {
   if (!error) bankConnections = data || [];
 }
 
+async function loadIbkrConnections() {
+  const { data, error } = await sb.from('ibkr_connections').select('*').order('created_at');
+  if (!error) ibkrConnections = data || [];
+}
+
 // ── TOTALS ──────────────────────────────────────────────────────────
 function totalByType(type) {
   return accounts.filter(a => a.type === type).reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
@@ -168,45 +174,46 @@ let allocChart = null;
 let currentRange = 3;
 let currentNWCategory = '';
 let currentNWBlockId = null;
-let allocModeBlock = false;
+let allocCategory = null;
 
-function setChartFilter(category, btn) {
+function setChartFilter(category) {
   currentNWCategory = category || '';
   currentNWBlockId = null;
-  document.querySelectorAll('#chart-cat-filters .filter-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
   renderBlockFilters();
   renderNWChart();
 }
 
 function renderBlockFilters() {
-  const container = document.getElementById('chart-block-filters');
+  const select = document.getElementById('chart-block-select');
   if (!currentNWCategory) {
-    container.innerHTML = '';
+    select.style.display = 'none';
+    select.innerHTML = '';
     return;
   }
   const blocks = accounts.filter(a => a.type === currentNWCategory);
   if (!blocks.length) {
-    container.innerHTML = '<span class="small-text">No blocks in this category.</span>';
+    select.style.display = 'none';
     return;
   }
-  container.innerHTML = `
-    <button class="filter-btn ${currentNWBlockId ? '' : 'active'}" onclick="setNWBlockFilter(null, this)">All</button>
-    ${blocks.map(b => `<button class="filter-btn ${currentNWBlockId === b.id ? 'active' : ''}" onclick="setNWBlockFilter('${b.id}', this)">${b.name}</button>`).join('')}
+  select.innerHTML = `
+    <option value="">All accounts</option>
+    ${blocks.map(b => `<option value="${b.id}">${b.name}</option>`).join('')}
   `;
+  select.value = currentNWBlockId || '';
+  select.style.display = '';
 }
 
-function setNWBlockFilter(blockId, btn) {
+function setNWBlockFilter(blockId) {
   currentNWBlockId = blockId || null;
-  document.querySelectorAll('#chart-block-filters .filter-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
   renderNWChart();
 }
 
-function setAllocView(isBlock, btn) {
-  allocModeBlock = isBlock;
-  document.getElementById('alloc-cat-btn').classList.toggle('active', !isBlock);
-  document.getElementById('alloc-block-btn').classList.toggle('active', isBlock);
+function setAllocCategory(cat, btn) {
+  allocCategory = (allocCategory === cat) ? null : cat;
+  document.querySelectorAll('.alloc-cat-btn').forEach(b => b.classList.remove('active', 'active-bank', 'active-invest', 'active-crypto'));
+  if (allocCategory) {
+    btn.classList.add('active', `active-${allocCategory}`);
+  }
   renderAllocChart();
 }
 
@@ -323,7 +330,7 @@ function renderAllocChart() {
   let data = [];
   let colors = [];
 
-  if (!allocModeBlock) {
+  if (!allocCategory) {
     const bank = totalByType('bank');
     const invest = totalByType('invest');
     const crypto = totalByType('crypto');
@@ -331,11 +338,11 @@ function renderAllocChart() {
     data = [bank, invest, crypto];
     colors = ['#2563eb', '#16a34a', '#d97706'];
   } else {
-    labels = accounts.map(a => a.name || 'Unnamed');
-    data = accounts.map(a => parseFloat(a.balance) || 0);
-    colors = accounts.map((_, idx) => [
-      '#2563eb', '#16a34a', '#d97706', '#9333ea', '#14b8a6', '#f59e0b', '#db2777', '#0ea5e9'
-    ][idx % 8]);
+    const palette = ['#e85d4a','#4f8ef7','#f5a623','#34c98a','#b06bdb','#14b8a6','#f472b6','#a3e635'];
+    const filtered = accounts.filter(a => a.type === allocCategory);
+    labels = filtered.map(a => a.name || 'Unnamed');
+    data = filtered.map(a => parseFloat(a.balance) || 0);
+    colors = filtered.map((_, idx) => palette[idx % palette.length]);
   }
 
   const total = data.reduce((sum, x) => sum + x, 0) || 1;
@@ -383,6 +390,14 @@ function timeAgo(iso) {
   return Math.floor(diff / 86400) + 'd ago';
 }
 
+function ibkrLinkUI(a) {
+  const conn = ibkrConnections.find(c => c.account_id === a.id);
+  if (!conn) {
+    return `<button class="bank-link-btn" onclick="event.stopPropagation(); openIbkrLinkModal('${a.id}')">🔗 Link IBKR account</button>`;
+  }
+  return `<span class="bank-link-status linked">✓ IBKR linked · synced ${timeAgo(conn.last_synced_at)}</span>`;
+}
+
 function bankLinkUI(a) {
   const conn = bankConnections.find(c => c.account_id === a.id);
   if (!conn) {
@@ -390,6 +405,9 @@ function bankLinkUI(a) {
   }
   if (conn.status === 'expired') {
     return `<span class="bank-link-status expired" onclick="event.stopPropagation(); startBankLink('${a.id}', '${conn.bank_name.replace(/'/g, "\\'")}', '${conn.country}')">⚠ Consent expired · click to re-link</span>`;
+  }
+  if (conn.status === 'error') {
+    return `<span class="bank-link-status expired" onclick="event.stopPropagation(); startBankLink('${a.id}', '${conn.bank_name.replace(/'/g, "\\'")}', '${conn.country}')">⚠ Sync failed · click to re-link</span>`;
   }
   return `<span class="bank-link-status linked">✓ Linked · synced ${timeAgo(conn.last_synced_at)}</span>`;
 }
@@ -409,6 +427,7 @@ function renderAccounts() {
           <div class="acc-name">${a.name}</div>
           ${a.note ? `<div class="acc-note">${a.note}</div>` : ''}
           ${a.type === 'bank' ? bankLinkUI(a) : ''}
+          ${a.type === 'invest' ? ibkrLinkUI(a) : ''}
         </div>
         <div class="acc-balance">${fmt(a.balance)}</div>
       </div>
@@ -510,6 +529,8 @@ function renderUpdate() {
     accounts.some(a => a.type === 'crypto') ? '' : 'none';
   document.getElementById('bank-refresh-section').style.display =
     bankConnections.length > 0 ? '' : 'none';
+  document.getElementById('ibkr-refresh-section').style.display =
+    ibkrConnections.length > 0 ? '' : 'none';
 }
 
 async function fetchCryptoTotal() {
@@ -550,6 +571,71 @@ async function refreshCryptoAccount() {
   } finally {
     btn.disabled = false;
     btn.textContent = '⟳ Refresh from Crypto.com';
+  }
+}
+
+// ── IBKR LINKING ─────────────────────────────────────────────────────
+function openIbkrLinkModal(accountId) {
+  document.getElementById('il-account-id').value = accountId;
+  document.getElementById('il-ibkr-id').value = '';
+  document.getElementById('il-error').style.display = 'none';
+  document.getElementById('ibkr-link-modal').classList.add('open');
+  setTimeout(() => document.getElementById('il-ibkr-id').focus(), 50);
+}
+
+function closeIbkrLinkModal() {
+  document.getElementById('ibkr-link-modal').classList.remove('open');
+}
+
+async function confirmIbkrLink() {
+  const accountId = document.getElementById('il-account-id').value;
+  const ibkrAccountId = document.getElementById('il-ibkr-id').value.trim().toUpperCase();
+  const errEl = document.getElementById('il-error');
+  if (!ibkrAccountId) {
+    errEl.textContent = 'Please enter your IBKR account ID.';
+    errEl.style.display = 'block';
+    return;
+  }
+  closeIbkrLinkModal();
+
+  const { error } = await sb.from('ibkr_connections').insert({
+    user_id: currentUser.id,
+    account_id: accountId,
+    ibkr_account_id: ibkrAccountId,
+    status: 'active',
+  });
+
+  if (error) { showToast('Failed to link IBKR account'); return; }
+  await loadIbkrConnections();
+  renderAccounts();
+  showToast('IBKR account linked');
+}
+
+// ── IBKR BALANCE ──────────────────────────────────────────────────────
+async function refreshIbkrBalance() {
+  const btn = document.getElementById('refresh-ibkr-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Syncing…';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(SUPABASE_URL + '/functions/v1/ibkr-balance', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + session.access_token }
+    });
+    if (!res.ok) throw new Error('ibkr-balance error');
+    const { updated, errors } = await res.json();
+    await loadAccounts();
+    renderUpdate();
+    renderDashboard();
+    const msg = errors > 0
+      ? `Synced ${updated} account(s). ${errors} failed.`
+      : `${updated} IBKR balance(s) updated.`;
+    showToast(msg);
+  } catch (err) {
+    showToast('Failed to sync IBKR balance');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟳ Sync IBKR balance';
   }
 }
 
@@ -685,6 +771,17 @@ async function takeSnapshot() {
 
   if (error) { showToast('Error saving snapshot'); return; }
 
+  // Upsert per-account balances
+  const accountRows = accounts.map(a => ({
+    user_id: currentUser.id,
+    date: today,
+    account_id: a.id,
+    balance: Math.round(parseFloat(a.balance) || 0),
+  }));
+  const { error: acctError } = await sb.from('snapshot_accounts')
+    .upsert(accountRows, { onConflict: 'user_id,date,account_id' });
+  if (acctError) console.error('Error saving account snapshots:', acctError);
+
   const idx = snapshots.findIndex(s => s.date === today);
   if (idx >= 0) snapshots[idx] = data;
   else snapshots.push(data);
@@ -766,7 +863,7 @@ async function deleteAccount() {
 
 // ── KEYBOARD ──────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closeBankLinkModal(); }
+  if (e.key === 'Escape') { closeModal(); closeBankLinkModal(); closeIbkrLinkModal(); }
   if (e.key === 'Enter' && document.getElementById('modal-overlay').classList.contains('open')) saveAccount();
   if (e.key === 'Enter' && document.getElementById('auth-screen').style.display !== 'none') handleAuth();
 });

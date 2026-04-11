@@ -352,6 +352,27 @@ body {
   color: var(--text-muted);
   letter-spacing: -0.01em;
 }
+.chart-filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.filter-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555550'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 28px 5px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.filter-select:hover { border-color: var(--border-strong); color: var(--accent); }
+.filter-select:focus { outline: none; border-color: var(--border-strong); color: var(--accent); }
+.filter-select option { background: var(--surface2); color: var(--text); }
 .chart-wrap { position: relative; height: 220px; }
 .chart-range { display: flex; gap: 4px; }
 .range-btn {
@@ -367,6 +388,9 @@ body {
 }
 .range-btn:hover { border-color: var(--border-strong); color: var(--text-muted); }
 .range-btn.active { background: var(--surface2); border-color: var(--border-strong); color: var(--accent); }
+.range-btn.active-bank   { border-color: var(--bank);   color: var(--bank); }
+.range-btn.active-invest { border-color: var(--invest); color: var(--invest); }
+.range-btn.active-crypto { border-color: var(--crypto); color: var(--crypto); }
 
 .alloc-wrap {
   display: flex;

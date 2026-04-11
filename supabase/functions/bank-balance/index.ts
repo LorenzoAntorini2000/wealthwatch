@@ -15,21 +15,46 @@ Deno.serve(async (req) => {
     });
   }
 
-  // 1. Verify Supabase JWT
+  // 1. Verify caller: accept a user JWT or the service-role key (from daily-snapshot)
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return jsonError(401, "Missing or invalid Authorization header");
   }
   const token = authHeader.slice(7);
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const isServiceRole = token === serviceRoleKey;
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-  );
+  let userId: string;
+  let supabaseUser: ReturnType<typeof createClient>;
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return jsonError(401, "Invalid or expired session");
+  if (isServiceRole) {
+    // Called server-side: user_id must be provided in the request body
+    let body: Record<string, unknown> = {};
+    try { body = await req.json(); } catch { /* empty body is fine */ }
+    if (!body.user_id || typeof body.user_id !== "string") {
+      return jsonError(400, "user_id is required when calling with service-role key");
+    }
+    userId = body.user_id;
+    supabaseUser = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey,
+      { auth: { persistSession: false } },
+    );
+  } else {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+    );
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return jsonError(401, "Invalid or expired session");
+    }
+    userId = user.id;
+    supabaseUser = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } },
+    );
   }
 
   // 2. Read Enable Banking secrets
@@ -39,19 +64,12 @@ Deno.serve(async (req) => {
     return jsonError(500, "Server misconfiguration: missing Enable Banking credentials");
   }
 
-  // Client that operates as the user (RLS enforced)
-  const supabaseUser = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
-
   // 3. Load active bank connections for this user
   const { data: connections, error: connError } = await supabaseUser
     .from("bank_connections")
     .select("*")
-    .eq("user_id", user.id)
-    .eq("status", "active");
+    .eq("user_id", userId)
+    .in("status", ["active", "error"]);
 
   if (connError) {
     console.error("Failed to load bank_connections:", connError);
@@ -100,6 +118,10 @@ Deno.serve(async (req) => {
 
       if (!balRes.ok) {
         console.error(`Balance fetch failed for ${conn.id}:`, balRes.status, await balRes.text());
+        await supabaseUser
+          .from("bank_connections")
+          .update({ status: "error" })
+          .eq("id", conn.id);
         errors++;
         continue;
       }
@@ -120,6 +142,10 @@ Deno.serve(async (req) => {
 
       if (!picked) {
         console.error(`No balance found for connection ${conn.id}`);
+        await supabaseUser
+          .from("bank_connections")
+          .update({ status: "error" })
+          .eq("id", conn.id);
         errors++;
         continue;
       }
@@ -139,10 +165,10 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Update last_synced_at on the connection
+      // Update last_synced_at and reset status to active on the connection
       await supabaseUser
         .from("bank_connections")
-        .update({ last_synced_at: new Date().toISOString() })
+        .update({ last_synced_at: new Date().toISOString(), status: "active" })
         .eq("id", conn.id);
 
       results.push({
@@ -154,6 +180,10 @@ Deno.serve(async (req) => {
       updated++;
     } catch (e) {
       console.error(`Unexpected error for connection ${conn.id}:`, e);
+      await supabaseUser
+        .from("bank_connections")
+        .update({ status: "error" })
+        .eq("id", conn.id);
       errors++;
     }
   }

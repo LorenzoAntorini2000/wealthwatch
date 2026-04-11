@@ -18,24 +18,26 @@ Deno.serve(async (req) => {
     });
   }
 
-  // 1. Verify Supabase JWT
+  // 1. Verify caller: accept a user JWT or the service-role key (from daily-snapshot)
   const authHeader = req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return jsonError(401, "Missing or invalid Authorization header");
   }
   const token = authHeader.slice(7);
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-  );
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser(
-    token,
-  );
-  if (authError || !user) {
-    return jsonError(401, "Invalid or expired session");
+  if (token !== serviceRoleKey) {
+    // User JWT path
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+    );
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return jsonError(401, "Invalid or expired session");
+    }
   }
+  // Service-role path falls through — no user-specific DB ops in this function
 
   // 2. Read API credentials from environment secrets
   const apiKey = Deno.env.get("CRYPTOCOM_API_KEY");
