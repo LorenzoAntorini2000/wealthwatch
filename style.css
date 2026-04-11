@@ -713,6 +713,56 @@ body {
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
 
+/* ── SETTINGS ── */
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.settings-card .chart-title {
+  margin-bottom: 10px;
+}
+.settings-note {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.secret-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.secret-label-row label {
+  margin-bottom: 0;
+}
+.secret-status {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.secret-status.configured { color: #4ade80; }
+.secret-status.not-set    { color: var(--text-faint); }
+.form-field textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 0.15s;
+}
+.form-field textarea:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 700px) {
   .sidebar { display: none; }
