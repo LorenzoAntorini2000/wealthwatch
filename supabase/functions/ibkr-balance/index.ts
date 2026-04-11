@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // 1. Verify Supabase JWT
+  // 1. Verify caller: accept a user JWT or the service-role key (from daily-snapshot)
   const authHeader = req.headers.get("Authorization");
   console.log("[ibkr] authHeader present:", !!authHeader);
   if (!authHeader?.startsWith("Bearer ")) {
@@ -24,16 +24,42 @@ Deno.serve(async (req) => {
     return jsonError(401, "Missing or invalid Authorization header");
   }
   const token = authHeader.slice(7);
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const isServiceRole = token === serviceRoleKey;
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-  );
+  let userId: string;
+  let supabaseUser: ReturnType<typeof createClient>;
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  console.log("[ibkr] getUser result — user:", !!user, "error:", authError?.message);
-  if (authError || !user) {
-    return jsonError(401, "Invalid or expired session");
+  if (isServiceRole) {
+    // Called server-side: user_id must be provided in the request body
+    let body: Record<string, unknown> = {};
+    try { body = await req.json(); } catch { /* empty body is fine */ }
+    if (!body.user_id || typeof body.user_id !== "string") {
+      return jsonError(400, "user_id is required when calling with service-role key");
+    }
+    userId = body.user_id;
+    console.log("[ibkr] service-role call for user:", userId);
+    supabaseUser = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      serviceRoleKey,
+      { auth: { persistSession: false } },
+    );
+  } else {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+    );
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    console.log("[ibkr] getUser result — user:", !!user, "error:", authError?.message);
+    if (authError || !user) {
+      return jsonError(401, "Invalid or expired session");
+    }
+    userId = user.id;
+    supabaseUser = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } },
+    );
   }
 
   // 2. Read IBKR Flex secrets
@@ -43,18 +69,11 @@ Deno.serve(async (req) => {
     return jsonError(500, "Server misconfiguration: missing IBKR credentials");
   }
 
-  // Client that operates as the user (RLS enforced)
-  const supabaseUser = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
-
   // 3. Load active IBKR connections for this user
   const { data: connections, error: connError } = await supabaseUser
     .from("ibkr_connections")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("status", "active");
 
   if (connError) {

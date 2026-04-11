@@ -22,3 +22,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/ibkr-balance/deno.json"
 entrypoint = "./functions/ibkr-balance/index.ts"
+
+[functions.daily-snapshot]
+enabled = true
+verify_jwt = false
+import_map = "./functions/daily-snapshot/deno.json"
+entrypoint = "./functions/daily-snapshot/index.ts"

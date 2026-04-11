@@ -768,6 +768,17 @@ async function takeSnapshot() {
 
   if (error) { showToast('Error saving snapshot'); return; }
 
+  // Upsert per-account balances
+  const accountRows = accounts.map(a => ({
+    user_id: currentUser.id,
+    date: today,
+    account_id: a.id,
+    balance: Math.round(parseFloat(a.balance) || 0),
+  }));
+  const { error: acctError } = await sb.from('snapshot_accounts')
+    .upsert(accountRows, { onConflict: 'user_id,date,account_id' });
+  if (acctError) console.error('Error saving account snapshots:', acctError);
+
   const idx = snapshots.findIndex(s => s.date === today);
   if (idx >= 0) snapshots[idx] = data;
   else snapshots.push(data);
