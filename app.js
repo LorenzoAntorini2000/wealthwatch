@@ -338,12 +338,7 @@ function renderAllocChart() {
     data = [bank, invest, crypto];
     colors = ['#2563eb', '#16a34a', '#d97706'];
   } else {
-    const catColors = {
-      bank:   ['#2563eb','#3b82f6','#1d4ed8','#60a5fa','#93c5fd','#1e40af','#bfdbfe','#172554'],
-      invest: ['#16a34a','#22c55e','#15803d','#4ade80','#86efac','#166534','#dcfce7','#052e16'],
-      crypto: ['#d97706','#f59e0b','#b45309','#fbbf24','#fde68a','#92400e','#fef3c7','#451a03'],
-    };
-    const palette = catColors[allocCategory];
+    const palette = ['#e85d4a','#4f8ef7','#f5a623','#34c98a','#b06bdb','#14b8a6','#f472b6','#a3e635'];
     const filtered = accounts.filter(a => a.type === allocCategory);
     labels = filtered.map(a => a.name || 'Unnamed');
     data = filtered.map(a => parseFloat(a.balance) || 0);
