@@ -96,14 +96,19 @@ Deno.serve(async (req) => {
   }
 
   // 5. Fetch balance for each connection
-  let updated = 0;
   let errors = 0;
-  const results: Array<{
-    account_id: string;
+
+  // Intermediate results keyed by account_id — some banks (e.g. Boursorama) return
+  // both an IBAN sub-account and a BANK reference sub-account for the same logical
+  // account. We collect all fetched balances first and then pick the best one per
+  // account_id before writing to the DB, so a zero-balance sub-account cannot
+  // overwrite a non-zero one.
+  const fetchedByAccount = new Map<string, {
     balance: number;
     currency: string;
     bank_name: string;
-  }> = [];
+    conn_id: string;
+  }>();
 
   for (const conn of connections) {
     try {
@@ -156,34 +161,26 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const amount = parseFloat(picked.balance_amount.amount);
-      const currency = picked.balance_amount.currency;
-
-      // Update the account balance
-      const { error: updateErr } = await supabaseUser
-        .from("accounts")
-        .update({ balance: amount })
-        .eq("id", conn.account_id);
-
-      if (updateErr) {
-        console.error(`Failed to update account ${conn.account_id}:`, updateErr);
-        errors++;
-        continue;
-      }
-
-      // Update last_synced_at and reset status to active on the connection
+      // Mark this sub-connection as successfully fetched
       await supabaseUser
         .from("bank_connections")
         .update({ last_synced_at: new Date().toISOString(), status: "active" })
         .eq("id", conn.id);
 
-      results.push({
-        account_id: conn.account_id,
-        balance: amount,
-        currency,
-        bank_name: conn.bank_name,
-      });
-      updated++;
+      const amount = parseFloat(picked.balance_amount.amount);
+      const currency = picked.balance_amount.currency;
+
+      // Keep the highest non-zero balance when multiple sub-accounts share the
+      // same account_id (e.g. IBAN + BANK reference from the same institution).
+      const existing = fetchedByAccount.get(conn.account_id);
+      if (!existing || amount > existing.balance) {
+        fetchedByAccount.set(conn.account_id, {
+          balance: amount,
+          currency,
+          bank_name: conn.bank_name,
+          conn_id: conn.id,
+        });
+      }
     } catch (e) {
       console.error(`Unexpected error for connection ${conn.id}:`, e);
       await supabaseUser
@@ -192,6 +189,31 @@ Deno.serve(async (req) => {
         .eq("id", conn.id);
       errors++;
     }
+  }
+
+  // 6. Write the best balance once per account_id
+  let updated = 0;
+  const results: Array<{
+    account_id: string;
+    balance: number;
+    currency: string;
+    bank_name: string;
+  }> = [];
+
+  for (const [account_id, { balance, currency, bank_name }] of fetchedByAccount) {
+    const { error: updateErr } = await supabaseUser
+      .from("accounts")
+      .update({ balance })
+      .eq("id", account_id);
+
+    if (updateErr) {
+      console.error(`Failed to update account ${account_id}:`, updateErr);
+      errors++;
+      continue;
+    }
+
+    results.push({ account_id, balance, currency, bank_name });
+    updated++;
   }
 
   return jsonOk({ updated, errors, results });
