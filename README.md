@@ -1,59 +1,163 @@
 # WealthWatch
 
-A personal finance dashboard — track your bank, investment, and crypto balances with history charts and net worth evolution.
+A personal finance dashboard for tracking your net worth across bank accounts, investments, and cryptocurrency. Balances sync automatically from live integrations, with daily snapshots and interactive charts showing your wealth over time.
+
+**Live app:** `https://lorenzoantorini2000.github.io/wealthwatch/`
+
+---
 
 ## Features
-- Dashboard with net worth hero, category totals, allocation donut chart
-- Net worth evolution line chart (3M / 6M / 1Y / All)
-- Stacked bar chart of category history
-- Add / edit / delete accounts
-- Manual balance updates with one-click snapshot
-- Snapshot history table with CSV export
-- Fully responsive — works great on mobile
-- All data stored locally in your browser (no server needed)
 
-## Deploy to GitHub Pages (5 minutes)
+- **Net worth dashboard** — total assets in EUR with delta vs. last snapshot
+- **Three asset categories** — Bank, Investments, Crypto with individual totals
+- **Net worth evolution chart** — line chart with 3M / 6M / 1Y / All time range and per-account filtering
+- **Allocation donut chart** — visual breakdown of asset distribution
+- **Category history chart** — stacked bar chart of category balances over time
+- **Snapshot history table** — all recorded snapshots with CSV export
+- **Add / edit / delete accounts** — manual balance entry for any account
+- **Daily auto-snapshots** — balances are automatically snapshotted at 06:00 UTC every day
+- **Fully responsive** — works on desktop and mobile
 
-### Step 1 — Create a GitHub repository
-1. Go to https://github.com/new
-2. Name it `wealthwatch` (or anything you like)
-3. Set it to **Public** (required for free GitHub Pages)
-4. Click **Create repository**
+---
 
-### Step 2 — Upload files
-Upload these 3 files to the repository root:
-- `index.html`
-- `style.css`
-- `app.js`
+## Integrations
 
-You can drag & drop them directly on the GitHub web UI after creating the repo.
+WealthWatch can sync balances automatically from three external sources:
 
-### Step 3 — Enable GitHub Pages
-1. In your repo, go to **Settings → Pages**
-2. Under "Source", select **Deploy from a branch**
-3. Choose branch: `main`, folder: `/ (root)`
-4. Click **Save**
+### Enable Banking (PSD2 Open Banking)
+Connect to 3000+ European banks via OAuth2 consent flow. Requires an Enable Banking developer account with an app ID and RSA private key.
 
-Your app will be live at:
-`https://YOUR_USERNAME.github.io/wealthwatch/`
+### Crypto.com Exchange
+Fetch your live cryptocurrency portfolio value in EUR. Requires a read-only Crypto.com API key and secret.
 
-(It takes ~1 minute to deploy the first time.)
+### Interactive Brokers (IBKR)
+Fetch your account Net Asset Value via the IBKR Flex Web Service. Requires a Flex token and Flex query ID configured in your IBKR account.
 
-### Step 4 — Bookmark on your phone
-- Open the URL in Safari (iOS) or Chrome (Android)
-- **iOS**: Share → "Add to Home Screen"
-- **Android**: Menu → "Add to Home Screen"
+All API credentials are stored encrypted in Supabase Vault and are never exposed to the browser.
 
-It will appear as an app icon on your phone!
+---
+
+## Tech Stack
+
+**Frontend**
+- Vanilla HTML, CSS, JavaScript
+- [Chart.js 4.4](https://www.chartjs.org/) for all charts
+- [Supabase JS SDK](https://supabase.com/docs/reference/javascript) for auth and data access
+
+**Backend**
+- [Supabase](https://supabase.com/) — PostgreSQL database, Auth, Vault (encrypted secrets)
+- Supabase Edge Functions (Deno/TypeScript) for all external API calls
+- `pg_cron` PostgreSQL extension for the daily snapshot job
+
+**External APIs**
+- [Enable Banking](https://enablebanking.com/) — PSD2 bank balance access
+- [Crypto.com Exchange API](https://exchange-docs.crypto.com/) — crypto portfolio value
+- [IBKR Flex Web Service](https://www.ibkr.com/en/trading/flex-web-service) — investment account NAV
+- [Frankfurter](https://www.frankfurter.app/) — USD → EUR exchange rates
+
+---
+
+## Database Schema
+
+| Table | Description |
+|---|---|
+| `accounts` | User accounts (name, type, balance, note) |
+| `snapshots` | Daily net worth records (bank, invest, crypto, total) |
+| `snapshot_accounts` | Per-account balance at each snapshot date |
+| `bank_connections` | Enable Banking session metadata and consent state |
+| `ibkr_connections` | IBKR account link metadata |
+| `user_secrets` | Encrypted API credentials (pointers to Supabase Vault) |
+
+All tables are protected by Row-Level Security — users can only access their own data.
+
+---
+
+## Edge Functions
+
+| Function | Trigger | Purpose |
+|---|---|---|
+| `bank-connect` | Browser | Initiates and completes Enable Banking OAuth flow |
+| `bank-balance` | Browser / cron | Fetches current balances from Enable Banking |
+| `crypto-balance` | Browser / cron | Fetches Crypto.com portfolio total in EUR |
+| `ibkr-balance` | Browser / cron | Fetches IBKR account NAV via Flex report |
+| `daily-snapshot` | `pg_cron` at 06:00 UTC | Refreshes all balances and records daily snapshots for every user |
+
+---
+
+## Setup
+
+### 1. Supabase project
+
+Create a free project at [supabase.com](https://supabase.com). Run the migrations in [`supabase/migrations/`](supabase/migrations/) against your project to create the schema.
+
+Deploy the Edge Functions from [`supabase/functions/`](supabase/functions/) using the Supabase CLI:
+
+```bash
+supabase functions deploy
+```
+
+Set the following Edge Function secrets:
+
+```bash
+supabase secrets set SUPABASE_URL=https://<project>.supabase.co
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+supabase secrets set CRON_SECRET=<a-random-secret-for-the-cron-job>
+```
+
+Enable the `pg_cron` extension and schedule the daily snapshot job:
+
+```sql
+select cron.schedule(
+  'daily-snapshot',
+  '0 6 * * *',
+  $$
+    select net.http_post(
+      url := 'https://<project>.supabase.co/functions/v1/daily-snapshot',
+      headers := '{"Authorization": "Bearer <CRON_SECRET>"}'::jsonb
+    );
+  $$
+);
+```
+
+### 2. Frontend configuration
+
+In `app.js`, update the Supabase project URL and anon key at the top of the file.
+
+### 3. Deploy to GitHub Pages
+
+Upload `index.html`, `style.css`, and `app.js` to a GitHub repository. Enable GitHub Pages under **Settings → Pages**, deploy from the `main` branch root. Your app will be live at:
+
+```
+https://<your-username>.github.io/<repo-name>/
+```
+
+---
+
+## Connecting integrations
+
+All integrations are configured in the **Settings** tab of the app after signing in.
+
+**Enable Banking**
+1. Create a developer account at [enablebanking.com](https://enablebanking.com)
+2. Generate an RSA key pair for your application
+3. Enter your App ID and private key (PEM format) in Settings
+4. Go to the **Accounts** tab, click the link icon on any bank account, and follow the OAuth consent flow
+
+**Crypto.com**
+1. In the Crypto.com Exchange app, create an API key with read-only permissions
+2. Enter the API key and secret in Settings
+
+**Interactive Brokers**
+1. In IBKR Client Portal, create a Flex Query that includes `EquitySummaryByReportDateInBase`
+2. Generate a Flex token and note the query ID
+3. Enter both values in Settings
+4. Go to the **Accounts** tab and link your IBKR account ID (e.g., `U1234567`)
 
 ---
 
 ## Data & Privacy
-All your data lives in your browser's `localStorage`. Nothing is sent to any server.
-If you clear your browser data, you'll lose your history — consider exporting CSV periodically.
 
-## Updating balances
-1. Open the app
-2. Go to **Update** tab
-3. Edit the numbers
-4. Tap **Save & take snapshot** to record today's values in history
+- All financial data is stored in your private Supabase project — not on any shared server
+- API credentials are encrypted at rest using Supabase Vault
+- The browser never receives decrypted credentials; all external API calls are made server-side by Edge Functions
+- Row-Level Security ensures each user can only read and write their own data
