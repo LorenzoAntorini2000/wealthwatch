@@ -941,6 +941,13 @@ function showToast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
+// ── SETTINGS INFO PANELS ─────────────────────────────────────────────
+function toggleInfo(btn) {
+  const panel = btn.closest('.card-title-row').nextElementSibling;
+  panel.classList.toggle('open');
+  btn.classList.toggle('active');
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────
 (async () => {
   const { data: { session } } = await sb.auth.getSession();

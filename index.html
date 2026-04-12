@@ -227,7 +227,57 @@
 
         <!-- Enable Banking -->
         <div class="settings-card" id="settings-eb">
-          <h2 class="chart-title">Enable Banking</h2>
+          <div class="card-title-row">
+            <h2 class="chart-title">Enable Banking</h2>
+            <button class="info-toggle" onclick="toggleInfo(this)" aria-label="Show setup guide">ℹ</button>
+          </div>
+          <div class="info-panel">
+            <p class="info-desc">
+              Enable Banking is a third-party Open Banking aggregator that gives your app read-only
+              access to your bank accounts' balances via the PSD2 API — without ever storing your
+              banking credentials.
+            </p>
+            <ol class="info-steps">
+              <li>
+                Go to <a href="https://enablebanking.com" target="_blank" rel="noopener">enablebanking.com</a>
+                and create a free account.
+              </li>
+              <li>
+                From the dashboard, go to <strong>API Applications</strong> → <strong>+ New Application</strong>.
+              </li>
+              <li>
+                Fill in all mandatory fields:
+                <ul class="info-sub">
+                  <li><strong>Name:</strong> anything, e.g. "WealthWatch"</li>
+                  <li><strong>Description:</strong> e.g. "Personal wealth tracking app"</li>
+                  <li><strong>Data protection email:</strong> your email address</li>
+                  <li><strong>Privacy policy URL:</strong> <code>https://lorenzoantorini2000.github.io/wealthwatch/privacy.html</code></li>
+                  <li><strong>Terms of service URL:</strong> <code>https://lorenzoantorini2000.github.io/wealthwatch/terms.html</code></li>
+                  <li><strong>Redirect URLs:</strong> <code>https://lorenzoantorini2000.github.io/wealthwatch/</code></li>
+                  <li>Set type to <strong>Production</strong></li>
+                </ul>
+              </li>
+              <li>
+                Once created, open the app and go to <strong>Keys</strong> → <strong>Generate key pair</strong>.
+                This downloads a <code>.pem</code> private key file. Save it securely — you won't be able
+                to retrieve it again.
+              </li>
+              <li>
+                Copy the <strong>Application ID</strong> (a UUID like <code>xxxxxxxx-xxxx-...</code>) and
+                paste it into the <strong>App ID</strong> field here.
+              </li>
+              <li>
+                Open the <code>.pem</code> file in a text editor, copy the full contents (including the
+                <code>-----BEGIN/END-----</code> lines) and paste into the <strong>Private Key</strong> field here.
+              </li>
+              <li>
+                <strong>Important:</strong> before linking any bank account in WealthWatch, go to
+                Enable Banking → <strong>Connected accounts</strong> and complete at least one bank
+                connection from there first — this verifies your identity with your bank under their
+                consent framework.
+              </li>
+            </ol>
+          </div>
           <p class="settings-note">Generate an RSA key pair, register the public key in your Enable Banking developer dashboard, and paste the private key here.</p>
           <div class="form-field">
             <div class="secret-label-row">
@@ -248,7 +298,42 @@
 
         <!-- Crypto.com -->
         <div class="settings-card" id="settings-crypto">
-          <h2 class="chart-title">Crypto.com</h2>
+          <div class="card-title-row">
+            <h2 class="chart-title">Crypto.com</h2>
+            <button class="info-toggle" onclick="toggleInfo(this)" aria-label="Show setup guide">ℹ</button>
+          </div>
+          <div class="info-panel">
+            <p class="info-desc">
+              Crypto.com Exchange provides a read-only API to retrieve your portfolio's total market
+              value in real time. This is the exchange product (exchange.crypto.com), not the main app.
+            </p>
+            <ol class="info-steps">
+              <li>
+                Go to <a href="https://exchange.crypto.com" target="_blank" rel="noopener">exchange.crypto.com</a>
+                and sign in.
+              </li>
+              <li>
+                Click your profile icon (top right) → <strong>Manage Account</strong>.
+              </li>
+              <li>
+                Navigate to <strong>API Management</strong> → <strong>+ Create New API Key</strong>.
+              </li>
+              <li>
+                Set a label (e.g. "WealthWatch"), leave permissions as <strong>Can Read</strong> only —
+                do not enable trading or withdrawal permissions.
+              </li>
+              <li>
+                Complete 2FA verification.
+              </li>
+              <li>
+                Copy the <strong>API Key</strong> and <strong>Secret Key</strong> immediately — the secret
+                is shown only once and cannot be retrieved again.
+              </li>
+              <li>
+                Paste both values into the fields here.
+              </li>
+            </ol>
+          </div>
           <p class="settings-note">Create a read-only API key in the Crypto.com Exchange app under Settings → API Keys.</p>
           <div class="form-field">
             <div class="secret-label-row">
@@ -269,7 +354,48 @@
 
         <!-- Interactive Brokers -->
         <div class="settings-card" id="settings-ibkr">
-          <h2 class="chart-title">Interactive Brokers</h2>
+          <div class="card-title-row">
+            <h2 class="chart-title">Interactive Brokers</h2>
+            <button class="info-toggle" onclick="toggleInfo(this)" aria-label="Show setup guide">ℹ</button>
+          </div>
+          <div class="info-panel">
+            <p class="info-desc">
+              Interactive Brokers' Flex Web Service lets you export account data — including total
+              Net Asset Value — via a scheduled report. WealthWatch uses this to read your portfolio's
+              EUR balance.
+            </p>
+            <ol class="info-steps">
+              <li>
+                Log in at
+                <a href="https://www.interactivebrokers.com" target="_blank" rel="noopener">interactivebrokers.com</a>.
+              </li>
+              <li>
+                Type <strong>"Flex Queries"</strong> in the search bar and open the page.
+              </li>
+              <li>
+                First, enable the Flex Web Service: click <strong>Flex Web Service Configuration</strong>
+                (top right of the page) → click <strong>Generate Token</strong> → copy the token
+                immediately and paste it into the <strong>Flex Token</strong> field here.
+              </li>
+              <li>
+                Back on the Flex Queries page, click <strong>+ Create</strong> next to
+                <strong>Activity Flex Query</strong>.
+              </li>
+              <li>
+                Name it (e.g. "WealthWatch NAV"), then under <strong>Sections</strong> find
+                <strong>Net Asset Value (NAV) in Base Currency</strong> and select the following fields:
+                <strong>Account ID</strong>, <strong>Cash</strong>, <strong>Stock</strong>, <strong>Total</strong>.
+              </li>
+              <li>
+                Set <strong>Date Period</strong> to <em>Last Business Day</em> and format to
+                <strong>XML</strong>, then save.
+              </li>
+              <li>
+                Click the <strong>ℹ</strong> icon next to your saved query to find the
+                <strong>Query ID</strong> — copy it and paste into the <strong>Query ID</strong> field here.
+              </li>
+            </ol>
+          </div>
           <p class="settings-note">Create a Flex Query in IBKR Account Management → Reports → Flex Queries, then generate a Flex Web Service token.</p>
           <div class="form-field">
             <div class="secret-label-row">
