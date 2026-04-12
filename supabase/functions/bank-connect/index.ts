@@ -235,6 +235,19 @@ async function handleFinish(
     return jsonError(502, "No linkable accounts returned from Enable Banking (no uid)");
   }
 
+  // Remove any previous connections for this account (e.g. expired/error rows)
+  // so that find() in the frontend always returns the fresh active connection.
+  const { error: deleteError } = await supabase
+    .from("bank_connections")
+    .delete()
+    .eq("user_id", userId)
+    .eq("account_id", account_id);
+
+  if (deleteError) {
+    console.error("DB delete error:", deleteError);
+    return jsonError(500, "Failed to clear old bank connection");
+  }
+
   // Insert one row per account UID returned by Enable Banking
   const rows = accounts.map((acc) => ({
     user_id: userId,
