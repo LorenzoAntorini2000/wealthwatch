@@ -653,9 +653,10 @@ async function refreshBankBalances() {
     });
     if (!res.ok) throw new Error('bank-balance error');
     const { updated, errors } = await res.json();
-    await loadAccounts();
+    await Promise.all([loadAccounts(), loadBankConnections()]);
     renderUpdate();
     renderDashboard();
+    renderAccounts();
     const msg = errors > 0
       ? `Synced ${updated} account(s). ${errors} need re-authorisation.`
       : `${updated} bank balance(s) updated.`;
