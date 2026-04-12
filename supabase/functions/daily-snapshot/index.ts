@@ -113,6 +113,7 @@ async function processUser(
       const res = await fetch(`${supabaseUrl}/functions/v1/crypto-balance`, {
         method: "POST",
         headers: serviceHeaders,
+        body: JSON.stringify({ user_id: userId }),
       });
       if (res.ok) {
         const data = await res.json();

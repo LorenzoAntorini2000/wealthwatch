@@ -1,6 +1,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
+import { getUserSecret } from "../_shared/getUserSecret.ts";
 
 const ENABLE_BANKING_API = "https://api.enablebanking.com";
 
@@ -32,11 +33,16 @@ Deno.serve(async (req) => {
     return jsonError(401, "Invalid or expired session");
   }
 
-  // 2. Read Enable Banking secrets
-  const appId = Deno.env.get("ENABLE_BANKING_APP_ID");
-  const privateKeyPem = Deno.env.get("ENABLE_BANKING_PRIVATE_KEY");
+  // 2. Read per-user Enable Banking credentials from Vault
+  const adminClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { persistSession: false } },
+  );
+  const appId = await getUserSecret(adminClient, user.id, "enable_banking_app_id");
+  const privateKeyPem = await getUserSecret(adminClient, user.id, "enable_banking_private_key");
   if (!appId || !privateKeyPem) {
-    return jsonError(500, "Server misconfiguration: missing Enable Banking credentials");
+    return jsonError(400, "Enable Banking credentials not configured. Please add them in Settings.");
   }
 
   // Client for DB operations — uses user JWT so RLS (user_id = auth.uid()) works
@@ -227,6 +233,19 @@ async function handleFinish(
 
   if (accounts.length === 0) {
     return jsonError(502, "No linkable accounts returned from Enable Banking (no uid)");
+  }
+
+  // Remove any previous connections for this account (e.g. expired/error rows)
+  // so that find() in the frontend always returns the fresh active connection.
+  const { error: deleteError } = await supabase
+    .from("bank_connections")
+    .delete()
+    .eq("user_id", userId)
+    .eq("account_id", account_id);
+
+  if (deleteError) {
+    console.error("DB delete error:", deleteError);
+    return jsonError(500, "Failed to clear old bank connection");
   }
 
   // Insert one row per account UID returned by Enable Banking

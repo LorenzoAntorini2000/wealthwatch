@@ -1,6 +1,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
+import { getUserSecret } from "../_shared/getUserSecret.ts";
 
 const ENABLE_BANKING_API = "https://api.enablebanking.com";
 
@@ -57,11 +58,16 @@ Deno.serve(async (req) => {
     );
   }
 
-  // 2. Read Enable Banking secrets
-  const appId = Deno.env.get("ENABLE_BANKING_APP_ID");
-  const privateKeyPem = Deno.env.get("ENABLE_BANKING_PRIVATE_KEY");
+  // 2. Read per-user Enable Banking credentials from Vault
+  const adminClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    serviceRoleKey,
+    { auth: { persistSession: false } },
+  );
+  const appId = await getUserSecret(adminClient, userId, "enable_banking_app_id");
+  const privateKeyPem = await getUserSecret(adminClient, userId, "enable_banking_private_key");
   if (!appId || !privateKeyPem) {
-    return jsonError(500, "Server misconfiguration: missing Enable Banking credentials");
+    return jsonError(400, "Enable Banking credentials not configured. Please add them in Settings.");
   }
 
   // 3. Load active bank connections for this user

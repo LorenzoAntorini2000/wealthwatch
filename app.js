@@ -166,6 +166,7 @@ function showView(name, btn) {
   if (name === 'accounts') renderAccounts();
   if (name === 'history') renderHistory();
   if (name === 'update') renderUpdate();
+  if (name === 'settings') renderSettings();
 }
 
 // ── DASHBOARD ────────────────────────────────────────────────────────
@@ -652,9 +653,10 @@ async function refreshBankBalances() {
     });
     if (!res.ok) throw new Error('bank-balance error');
     const { updated, errors } = await res.json();
-    await loadAccounts();
+    await Promise.all([loadAccounts(), loadBankConnections()]);
     renderUpdate();
     renderDashboard();
+    renderAccounts();
     const msg = errors > 0
       ? `Synced ${updated} account(s). ${errors} need re-authorisation.`
       : `${updated} bank balance(s) updated.`;
@@ -861,6 +863,67 @@ async function deleteAccount() {
   showToast('Account deleted');
 }
 
+// ── SETTINGS ─────────────────────────────────────────────────────────
+
+async function renderSettings() {
+  // Reset all status badges to loading state
+  document.querySelectorAll('.secret-status').forEach(el => {
+    el.textContent = '…';
+    el.className = 'secret-status';
+  });
+
+  const { data, error } = await sb.rpc('get_user_secret_status');
+  if (error) {
+    console.error('get_user_secret_status:', error);
+    document.querySelectorAll('.secret-status').forEach(el => {
+      el.textContent = 'error';
+    });
+    return;
+  }
+
+  data.forEach(({ key, is_configured }) => {
+    const el = document.getElementById('status-' + key);
+    if (!el) return;
+    el.textContent = is_configured ? '✓ Configured' : 'Not set';
+    el.className = 'secret-status ' + (is_configured ? 'configured' : 'not-set');
+  });
+}
+
+async function saveSecretGroup(keys, cardId) {
+  const card = document.getElementById(cardId);
+  const btn = card.querySelector('.btn-primary');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  let saved = 0;
+  let failed = 0;
+  for (const key of keys) {
+    const input = document.getElementById('secret-' + key);
+    const val = input.value.trim();
+    if (!val) continue; // blank = keep existing value
+    const { error } = await sb.rpc('upsert_user_secret', { p_key: key, p_value: val });
+    if (error) {
+      console.error('upsert_user_secret', key, error);
+      failed++;
+    } else {
+      input.value = ''; // clear after save — write-only
+      saved++;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Save';
+
+  if (failed > 0) {
+    showToast('Error saving credentials');
+  } else if (saved > 0) {
+    showToast('Credentials saved');
+    await renderSettings(); // refresh status badges
+  } else {
+    showToast('No changes — fill in a field to update');
+  }
+}
+
 // ── KEYBOARD ──────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeModal(); closeBankLinkModal(); closeIbkrLinkModal(); }
@@ -876,6 +939,13 @@ function showToast(msg) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── SETTINGS INFO PANELS ─────────────────────────────────────────────
+function toggleInfo(btn) {
+  const panel = btn.closest('.card-title-row').nextElementSibling;
+  panel.classList.toggle('open');
+  btn.classList.toggle('active');
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
